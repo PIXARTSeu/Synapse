@@ -104,6 +104,36 @@ program
   })
 
 program
+  .command('recategorize-skills')
+  .description('Recategorize all skills in DB to match the current category map (idempotent)')
+  .argument('[path]', 'Workspace root (defaults to SKILLBRAIN_ROOT or .)', '')
+  .option('--dry', 'Preview changes without writing')
+  .action(async (targetPath: string, opts: { dry?: boolean }) => {
+    try {
+      const root = targetPath || process.env.SKILLBRAIN_ROOT || '.'
+      const { recategorizeSkills } = await import('@skillbrain/storage')
+      const result = recategorizeSkills(root, { dryRun: opts.dry })
+      console.log(`[recategorize] scanned ${result.scanned} skills (dryRun=${!!opts.dry})`)
+      console.log(`→ ${result.changes.length} skills with category drift`)
+      if (opts.dry) {
+        for (const c of result.changes.slice(0, 30)) {
+          console.log(`  ${c.name.padEnd(40)} ${c.from} → ${c.to}`)
+        }
+        if (result.changes.length > 30) console.log(`  ... and ${result.changes.length - 30} more`)
+        console.log('(dry run — no DB writes)')
+      } else {
+        console.log(`✅ Applied ${result.updated} updates`)
+      }
+      console.log('\n=== Final category distribution ===')
+      for (const s of result.finalDistribution) console.log(`  ${s.category.padEnd(15)} ${s.count}`)
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error(`[codegraph] Recategorize failed: ${msg}`)
+      process.exit(1)
+    }
+  })
+
+program
   .command('mcp-proxy')
   .description('Start stdio→HTTP proxy (connects local Claude Code/Desktop to remote MCP server)')
   .action(async () => {

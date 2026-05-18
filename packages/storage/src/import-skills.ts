@@ -358,6 +358,47 @@ function isLifecycleSkill(name: string): boolean {
   return ['codegraph-context', 'capture-learning', 'load-learnings', 'post-session-review', 'using-superpowers'].includes(name)
 }
 
+export interface RecategorizeResult {
+  scanned: number
+  updated: number
+  changes: { name: string; from: string; to: string }[]
+  finalDistribution: { category: string; count: number }[]
+}
+
+/**
+ * Recategorize all skills in DB to match the current CATEGORY_MAP.
+ * Idempotent: only UPDATEs rows whose resolved category differs.
+ * Pass dryRun=true to preview without writing.
+ */
+export function recategorizeSkills(workspacePath: string, opts: { dryRun?: boolean } = {}): RecategorizeResult {
+  const db = openDb(workspacePath)
+  try {
+    const rows = db.prepare('SELECT name, category FROM skills').all() as { name: string; category: string }[]
+    const changes: { name: string; from: string; to: string }[] = []
+    for (const row of rows) {
+      const newCat = detectCategory(row.name)
+      if (newCat !== row.category) changes.push({ name: row.name, from: row.category, to: newCat })
+    }
+
+    if (!opts.dryRun && changes.length > 0) {
+      const stmt = db.prepare('UPDATE skills SET category = ?, updated_at = ? WHERE name = ?')
+      const now = new Date().toISOString()
+      const tx = db.transaction((items: typeof changes) => {
+        for (const u of items) stmt.run(u.to, now, u.name)
+      })
+      tx(changes)
+    }
+
+    const finalDistribution = db
+      .prepare('SELECT category, COUNT(*) as count FROM skills GROUP BY category ORDER BY count DESC')
+      .all() as { category: string; count: number }[]
+
+    return { scanned: rows.length, updated: opts.dryRun ? 0 : changes.length, changes, finalDistribution }
+  } finally {
+    closeDb(db)
+  }
+}
+
 function extractTags(name: string, content: string): string[] {
   const tags = [name]
   // Extract from frontmatter tags if present

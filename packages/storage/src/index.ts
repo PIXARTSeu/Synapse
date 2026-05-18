@@ -14,7 +14,8 @@ export { runMigrations, getAppliedMigrations } from './migrator.js'
 export { loadMeta, saveMeta } from './meta.js'
 export { loadRegistry, getRegistryEntry, upsertRegistry, removeFromRegistry } from './registry.js'
 export { migrate, migrate as migrateLearnings } from './migrate-learnings.js'
-export { importSkills } from './import-skills.js'
+export { importSkills, recategorizeSkills, detectCategory } from './import-skills.js'
+export type { RecategorizeResult } from './import-skills.js'
 
 // ── Crypto ────────────────────────────────────────────
 export { encrypt, decrypt, isEncryptionAvailable, assertEncryptionUsable, rotateKey } from './crypto.js'
