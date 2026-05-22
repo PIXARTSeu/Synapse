@@ -11,7 +11,7 @@ import {
   removeStackTag,
 } from './js/modal.js'
 import {
-  renderHome, renderSkills, searchSkills, openSkillDetail,
+  renderHome, renderSkills, renderSkillsHealth, searchSkills, openSkillDetail,
   renderMemories, searchMemories, openMemoryDetail,
   renderSessions, renderProjects, renderProjectDetail,
   renderProjectTab, applyProjectFilters, loadEnvVars, searchGlobal, renderWorkLog,
@@ -295,6 +295,7 @@ function addMemberRow() {
 
 // ── Expose globals needed by inline onclick handlers ──
 window.renderSkills = renderSkills
+window.renderSkillsHealth = renderSkillsHealth
 window.renderMemories = renderMemories
 window.openSkillDetail = (name) => openSkillDetail(name, openDetail)
 window.openMemoryDetail = (id) => openMemoryDetail(id, openDetail)

@@ -104,6 +104,37 @@ program
   })
 
 program
+  .command('backfill-skill-usage')
+  .description('Backfill skill_usage + memory_skill_edges from existing memories (idempotent)')
+  .argument('[path]', 'Workspace root (defaults to SKILLBRAIN_ROOT or .)', '')
+  .option('--dry', 'Preview without writing')
+  .action(async (targetPath: string, opts: { dry?: boolean }) => {
+    try {
+      const root = targetPath || process.env.SKILLBRAIN_ROOT || '.'
+      const { backfillSkillUsage } = await import('@skillbrain/storage')
+      const r = backfillSkillUsage(root, { dryRun: opts.dry })
+      console.log(`[backfill] scanned ${r.scannedMemories} memories (dryRun=${!!opts.dry})`)
+      console.log(`→ ${r.memoriesWithSkill} memories carry a skill signal`)
+      console.log(`→ ${r.skillUsageInserted} new skill_usage rows (action=applied)`)
+      console.log(`→ ${r.edgesCreated} new memory→skill edges`)
+      if (!opts.dry) console.log(`→ Recomputed counters on ${r.countersRecomputed} skills`)
+      if (r.unknownSkills.length > 0) {
+        console.log(`\n⚠️ ${r.unknownSkills.length} skill name(s) referenced by memories but not in skills table (typos? deleted skills?):`)
+        for (const u of r.unknownSkills.slice(0, 10)) console.log(`  · ${u.skill}  (${u.count} memories)`)
+        if (r.unknownSkills.length > 10) console.log(`  ... and ${r.unknownSkills.length - 10} more`)
+      }
+      if (r.perSkill.length > 0) {
+        console.log(`\nTop skills by backfilled applied events:`)
+        for (const s of r.perSkill.slice(0, 15)) console.log(`  ${s.skill.padEnd(35)} ${s.applied}`)
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error(`[codegraph] Backfill failed: ${msg}`)
+      process.exit(1)
+    }
+  })
+
+program
   .command('recategorize-skills')
   .description('Recategorize all skills in DB to match the current category map (idempotent)')
   .argument('[path]', 'Workspace root (defaults to SKILLBRAIN_ROOT or .)', '')

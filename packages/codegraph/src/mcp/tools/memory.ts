@@ -117,6 +117,43 @@ export function registerMemoryTools(server: McpServer, _ctx: ToolContext): void 
         return { mem, duplicate: null, contradictionWarnings }
       })
 
+      // Autolearning Steps 1+4 — feed signal back into the skill graph.
+      // Skipped for drafts (pending-review): only `active` memories count as a
+      // real validation of a skill. Two signal sources, processed together:
+      //   a) effectiveSkill (Memory.skill field — explicit / auto-linked)
+      //   b) tags matching /^skill:(.+)$/ (convention from global CLAUDE.md)
+      // For each unique skill name found:
+      //   - recordUsage(..., 'applied') → bumps useful_count, confidence, resets
+      //     sessions_since_validation, and inserts skill_usage row (see Step 2).
+      //   - linkMemoryToSkill(...) → creates the Memory--DerivedFrom→Skill edge
+      //     (Step 4) so the dashboard Graph view and contextual skill_route work.
+      if (memory.mem && !draft) {
+        const skillsFromTags = (tags || [])
+          .filter((t): t is string => typeof t === 'string' && t.startsWith('skill:'))
+          .map((t) => t.slice('skill:'.length).trim())
+          .filter((s) => s.length > 0)
+        const allSkills = new Set<string>([
+          ...(effectiveSkill ? [effectiveSkill] : []),
+          ...skillsFromTags,
+        ])
+        if (allSkills.size > 0) {
+          withSkillsStore(resolved.path, (skillStore) => {
+            for (const skillName of allSkills) {
+              try {
+                skillStore.recordUsage(skillName, 'applied', {
+                  sessionId, project, userId: undefined,
+                  task: memory.mem!.context.slice(0, 200),
+                })
+                // strength 0.9 — explicit application via memory_add (strongest signal)
+                skillStore.linkMemoryToSkill(memory.mem!.id, skillName, 0.9, 'tag/field on memory_add')
+              } catch (err) {
+                console.error('[memory_add] autolearning hook failed for', skillName, err)
+              }
+            }
+          })
+        }
+      }
+
       if (memory.duplicate) {
         const d = memory.duplicate
         let text = `⚠️ Near-duplicate found: ${d.id} (${d.type}, confidence: ${d.confidence})\n`

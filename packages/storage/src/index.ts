@@ -16,6 +16,8 @@ export { loadRegistry, getRegistryEntry, upsertRegistry, removeFromRegistry } fr
 export { migrate, migrate as migrateLearnings } from './migrate-learnings.js'
 export { importSkills, recategorizeSkills, detectCategory } from './import-skills.js'
 export type { RecategorizeResult } from './import-skills.js'
+export { backfillSkillUsage } from './backfill-skill-usage.js'
+export type { BackfillReport } from './backfill-skill-usage.js'
 
 // ── Crypto ────────────────────────────────────────────
 export { encrypt, decrypt, isEncryptionAvailable, assertEncryptionUsable, rotateKey } from './crypto.js'

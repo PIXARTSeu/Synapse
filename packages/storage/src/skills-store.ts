@@ -11,6 +11,7 @@
 import type Database from 'better-sqlite3'
 import { openDb, closeDb } from './db.js'
 import { SKILL_DECAY_SESSIONS_THRESHOLD, SKILL_DEPRECATION_SESSIONS_THRESHOLD } from './constants.js'
+import { randomId } from './utils/hash.js'
 
 export type SkillType = 'domain' | 'lifecycle' | 'process' | 'agent' | 'command'
 
@@ -120,6 +121,13 @@ export class SkillsStore {
       insertUsage: this.db.prepare(`
         INSERT INTO skill_usage (skill_name, session_id, project, task_description, action, user_id)
         VALUES (?, ?, ?, ?, ?, ?)
+      `),
+      // Step 2 — bump usage_count on every loaded/applied event (general activity)
+      bumpUsageCount: this.db.prepare(`
+        UPDATE skills SET
+          usage_count = COALESCE(usage_count, 0) + 1,
+          updated_at = ?
+        WHERE name = ?
       `),
       topRouted: this.db.prepare(`
         SELECT skill_name as skillName, COUNT(*) as count
@@ -444,6 +452,18 @@ export class SkillsStore {
         action,
         ctx.userId ?? null,
       )
+      // Step 2 — keep aggregated counters on `skills` in sync so /api/skills/health
+      // and ranking reads are O(1) per skill instead of aggregating skill_usage.
+      // loaded + applied count as usage; routed (system suggestion) does not.
+      if (action === 'loaded' || action === 'applied') {
+        const nowIso = new Date().toISOString()
+        try { this.stmts.bumpUsageCount.run(nowIso, name) } catch { /* migration 016 not applied */ }
+        if (action === 'applied') {
+          // reinforceSkill: confidence +1 (capped at 10), useful_count +1,
+          // sessions_since_validation = 0, last_validated = now.
+          try { this.stmts.reinforceSkill.run(nowIso, nowIso, name) } catch { /* ok */ }
+        }
+      }
     } catch (err) {
       if (!SkillsStore._telemetryWarned) {
         console.warn('[skill_usage] insert failed, telemetry disabled:', (err as Error).message)
@@ -512,20 +532,38 @@ export class SkillsStore {
         reinforced++
       } catch { /* ok */ }
     }
+    // System/Lifecycle skills (e.g. _routing-index, using-superpowers) are core
+    // infrastructure — protect them from decay/deprecation regardless of usage.
+    const PROTECTED_CATS = "'System','Lifecycle'"
     try {
       this.stmts.incrementSkillSessionCount.run()
       this.db.prepare(`
         UPDATE skills SET confidence = MAX(COALESCE(confidence, 5) - 1, 1), updated_at = ?
-        WHERE sessions_since_validation >= ${SKILL_DECAY_SESSIONS_THRESHOLD} AND COALESCE(confidence, 5) > 1 AND status = 'active'
+        WHERE sessions_since_validation >= ${SKILL_DECAY_SESSIONS_THRESHOLD}
+          AND COALESCE(confidence, 5) > 1
+          AND status = 'active'
+          AND category NOT IN (${PROTECTED_CATS})
       `).run(now)
       const deprecated = (this.db.prepare(
-        `SELECT COUNT(*) as c FROM skills WHERE sessions_since_validation >= ${SKILL_DEPRECATION_SESSIONS_THRESHOLD} AND COALESCE(confidence, 5) < 3 AND status = 'active'`
+        `SELECT COUNT(*) as c FROM skills
+         WHERE sessions_since_validation >= ${SKILL_DEPRECATION_SESSIONS_THRESHOLD}
+           AND COALESCE(confidence, 5) < 3
+           AND status = 'active'
+           AND category NOT IN (${PROTECTED_CATS})`
       ).get() as any)?.c ?? 0
       this.db.prepare(
-        `UPDATE skills SET status = 'deprecated', updated_at = ? WHERE sessions_since_validation >= ${SKILL_DEPRECATION_SESSIONS_THRESHOLD} AND COALESCE(confidence, 5) < 3 AND status = 'active'`
+        `UPDATE skills SET status = 'deprecated', updated_at = ?
+         WHERE sessions_since_validation >= ${SKILL_DEPRECATION_SESSIONS_THRESHOLD}
+           AND COALESCE(confidence, 5) < 3
+           AND status = 'active'
+           AND category NOT IN (${PROTECTED_CATS})`
       ).run(now)
       const decayed = (this.db.prepare(
-        `SELECT COUNT(*) as c FROM skills WHERE sessions_since_validation >= ${SKILL_DECAY_SESSIONS_THRESHOLD} AND COALESCE(confidence, 5) > 1 AND status = 'active'`
+        `SELECT COUNT(*) as c FROM skills
+         WHERE sessions_since_validation >= ${SKILL_DECAY_SESSIONS_THRESHOLD}
+           AND COALESCE(confidence, 5) > 1
+           AND status = 'active'
+           AND category NOT IN (${PROTECTED_CATS})`
       ).get() as any)?.c ?? 0
       return { reinforced, decayed, deprecated }
     } catch {
@@ -564,6 +602,61 @@ export class SkillsStore {
     try {
       this.stmts.upsertCooccurrence.run(a, b)
     } catch { /* migration 016 not applied yet */ }
+  }
+
+  // ── Memory ↔ Skill edges (Step 4 of autolearning) ──────────────────────
+  // Idempotent: UNIQUE(memory_id, skill_name, type) makes re-inserts no-ops.
+  // The skill MUST exist in `skills` table (FK), so this silently skips
+  // memories tagged with skill:typo or skills that were deprecated/removed.
+  linkMemoryToSkill(memoryId: string, skillName: string, strength: number, reason?: string): boolean {
+    try {
+      const id = `MSE-${randomId()}`
+      const now = new Date().toISOString()
+      this.db.prepare(`
+        INSERT OR IGNORE INTO memory_skill_edges
+          (id, memory_id, skill_name, type, strength, reason, created_at)
+        VALUES (?, ?, ?, 'DerivedFrom', ?, ?, ?)
+      `).run(id, memoryId, skillName, strength, reason ?? null, now)
+      return true
+    } catch {
+      // Skill doesn't exist (typo tag) or migration not applied — safe to skip
+      return false
+    }
+  }
+
+  memoriesForSkill(skillName: string, limit = 50): { memoryId: string; strength: number; reason: string | null; createdAt: string }[] {
+    try {
+      const rows = this.db.prepare(`
+        SELECT memory_id as memoryId, strength, reason, created_at as createdAt
+        FROM memory_skill_edges
+        WHERE skill_name = ? AND type = 'DerivedFrom'
+        ORDER BY strength DESC, created_at DESC
+        LIMIT ?
+      `).all(skillName, limit) as any[]
+      return rows
+    } catch { return [] }
+  }
+
+  skillsForMemory(memoryId: string): { skillName: string; strength: number; reason: string | null }[] {
+    try {
+      const rows = this.db.prepare(`
+        SELECT skill_name as skillName, strength, reason
+        FROM memory_skill_edges
+        WHERE memory_id = ? AND type = 'DerivedFrom'
+        ORDER BY strength DESC
+      `).all(memoryId) as any[]
+      return rows
+    } catch { return [] }
+  }
+
+  countMemoriesForSkill(skillName: string): number {
+    try {
+      const row = this.db.prepare(`
+        SELECT COUNT(*) as c FROM memory_skill_edges
+        WHERE skill_name = ? AND type = 'DerivedFrom'
+      `).get(skillName) as { c: number } | undefined
+      return row?.c ?? 0
+    } catch { return 0 }
   }
 
   buildCooccurrences(): number {

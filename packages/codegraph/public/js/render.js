@@ -371,6 +371,15 @@ export async function renderHome() {
 
 // ── Skills ──
 
+function skillsViewToggle(active) {
+  return `
+    <div style="display:flex;gap:8px;margin-bottom:14px">
+      <button class="filter-btn ${active === 'catalog' ? 'active' : ''}" onclick="renderSkills()">Catalog</button>
+      <button class="filter-btn ${active === 'health' ? 'active' : ''}" onclick="renderSkillsHealth()">Health</button>
+    </div>
+  `
+}
+
 export async function renderSkills(typeFilter) {
   const url = typeFilter ? `/api/skills?type=${typeFilter}` : `/api/skills`
   const data = await api.get(url)
@@ -380,6 +389,8 @@ export async function renderSkills(typeFilter) {
 
   document.getElementById('page').innerHTML = `
     <div class="section-title">Skills Browser <span class="count" style="font-size:12px;font-weight:400;color:var(--text-muted)">${data.total} total</span></div>
+
+    ${skillsViewToggle('catalog')}
 
     <div class="filters">
       <button class="filter-btn ${!typeFilter ? 'active' : ''}" onclick="renderSkills()">All</button>
@@ -402,6 +413,71 @@ export async function renderSkills(typeFilter) {
         </div>
       `).join('')}
     </div>
+  `
+}
+
+// ── Skills Health (autolearning dashboard) ──
+// Surfaces /api/skills/health which aggregates skill_usage telemetry,
+// confidence trends, and at-risk/dead detection. Until autolearning was
+// wired up (Steps 1-4), all these arrays were empty. Now they fill.
+
+export async function renderSkillsHealth() {
+  const h = await api.get('/api/skills/health')
+
+  const list = (rows, valueKey = 'count') => rows && rows.length
+    ? rows.map(r => `
+        <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border-subtle)">
+          <a href="#" onclick="event.preventDefault();openSkillDetail('${escHtml(r.skillName || r.name)}')" style="color:var(--text);text-decoration:none">${escHtml(r.skillName || r.name)}</a>
+          <span style="color:var(--text-muted);font-variant-numeric:tabular-nums">${r[valueKey] ?? r.count ?? ''}</span>
+        </div>
+      `).join('')
+    : `<div style="color:var(--text-dim);font-size:12px;padding:8px 0">— no data yet —</div>`
+
+  const atRiskList = (rows) => rows && rows.length
+    ? rows.map(r => `
+        <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border-subtle)">
+          <a href="#" onclick="event.preventDefault();openSkillDetail('${escHtml(r.name)}')" style="color:var(--text);text-decoration:none">${escHtml(r.name)}</a>
+          <span style="color:var(--text-muted);font-size:11px">conf:${r.confidence} · stale:${r.sessionsStale}</span>
+        </div>
+      `).join('')
+    : `<div style="color:var(--text-dim);font-size:12px;padding:8px 0">— all skills healthy —</div>`
+
+  const cooccList = (rows) => rows && rows.length
+    ? rows.map(r => `
+        <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border-subtle);font-size:13px">
+          <span>${escHtml(r.skillA)} ↔ ${escHtml(r.skillB)}</span>
+          <span style="color:var(--text-muted)">${r.cooccurrenceCount}</span>
+        </div>
+      `).join('')
+    : `<div style="color:var(--text-dim);font-size:12px;padding:8px 0">— no cooccurrence signal yet —</div>`
+
+  const panel = (title, body, hint) => `
+    <div style="background:var(--bg-card);border:1px solid var(--border-subtle);border-radius:8px;padding:14px;min-height:140px">
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);margin-bottom:10px">${title}</div>
+      ${body}
+      ${hint ? `<div style="font-size:10px;color:var(--text-dim);margin-top:8px;font-style:italic">${hint}</div>` : ''}
+    </div>
+  `
+
+  document.getElementById('page').innerHTML = `
+    <div class="section-title">Skills Health
+      <span class="count" style="font-size:12px;font-weight:400;color:var(--text-muted)">autolearning telemetry &middot; last 7 days</span>
+    </div>
+
+    ${skillsViewToggle('health')}
+
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:14px">
+      ${panel('Top Routed (7d)', list(h.topRouted), 'skills proposed by skill_route')}
+      ${panel('Top Loaded (7d)', list(h.topLoaded), 'skills opened via skill_read')}
+      ${panel('Top Applied (7d)', list(h.topApplied), 'memories saved with skill:* tag')}
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
+      ${panel('⚠ At Risk', atRiskList(h.atRiskSkills), 'low confidence + many stale sessions — re-validate or deprecate')}
+      ${panel('💀 Dead Skills (30d)', list(h.deadSkills), 'routed but never loaded — likely noise or wrong description')}
+    </div>
+
+    ${panel('🔁 Top Cooccurrences', cooccList(h.topCooccurrences), 'skills frequently used together in the same session — drives "you might also need" suggestions')}
   `
 }
 

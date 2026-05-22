@@ -34,7 +34,7 @@ import { createMcpServer } from './server.js'
 import { createOAuthRouter, verifyOAuthBearer } from './oauth-router.js'
 import { loadRegistry, upsertRegistry } from '@skillbrain/storage'
 import { openDb, closeDb } from '@skillbrain/storage'
-import { MemoryStore } from '@skillbrain/storage'
+import { MemoryStore, SkillsStore } from '@skillbrain/storage'
 import { assertEncryptionUsable, decrypt } from '@skillbrain/storage'
 import { dashboardUrl } from '../constants.js'
 import type { RouteContext } from './routes/index.js'
@@ -731,11 +731,21 @@ export async function startHttpServer(port: number, authToken?: string): Promise
     if (process.env.SKILLBRAIN_DECAY_DISABLED !== '1') {
       const db = openDb(SKILLBRAIN_ROOT)
       const memStore = new MemoryStore(db)
+      const skillStore = new SkillsStore(db)
       startDecayScheduler({
-        runner: () => { memStore.autoDecayIfDue() },
+        runner: () => {
+          memStore.autoDecayIfDue()
+          // Step 3 — skills also age. applyDecay() increments
+          // sessions_since_validation for every active skill, decays confidence
+          // for those untouched ≥10 sessions, deprecates those ≥30 with conf <3.
+          // System/Lifecycle skills are protected (see applyDecay impl).
+          try { skillStore.applyDecay() } catch (err) {
+            console.error('[http-server] skill decay failed', err)
+          }
+        },
         intervalMs: 24 * 60 * 60 * 1000, // 24h
       })
-      console.log('[http-server] decay scheduler started (interval: 24h)')
+      console.log('[http-server] decay scheduler started (interval: 24h, memory + skills)')
     }
   })
 }
