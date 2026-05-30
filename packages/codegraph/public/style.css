@@ -609,6 +609,107 @@ main {
 .hub-kpi-pink .hub-kpi-val { color: var(--pink); }
 .hub-kpi-pink:hover { border-color: rgba(236,72,153,.4); box-shadow: 0 4px 16px rgba(236,72,153,.12); }
 
+/* Attention band */
+.hub-attention {
+  margin-bottom: 16px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--yellow) 5%, var(--card));
+  border: 1px solid color-mix(in srgb, var(--yellow) 18%, var(--border));
+  overflow: hidden;
+}
+
+.hub-attention-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 14px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .6px;
+  color: var(--yellow);
+  border-bottom: 1px solid color-mix(in srgb, var(--yellow) 12%, var(--border));
+}
+
+.hub-attention-icon {
+  display: inline-flex;
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+}
+
+.hub-attention-icon svg { width: 13px; height: 13px; }
+
+.hub-attention-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  cursor: pointer;
+  transition: background .12s;
+  border-bottom: 1px solid var(--border);
+}
+
+.hub-attention-item:last-child { border-bottom: none; }
+
+.hub-attention-item:hover { background: rgba(255,255,255,.03); }
+
+.attn-count {
+  font-size: 20px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  min-width: 28px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.attn-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.attn-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.attn-hint {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.attn-arrow {
+  display: inline-flex;
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  color: var(--text-muted);
+  transition: color .12s, transform .12s;
+}
+
+.attn-arrow svg { width: 14px; height: 14px; }
+
+.hub-attention-item:hover .attn-arrow {
+  color: var(--text-dim);
+  transform: translateX(2px);
+}
+
+/* Severity accent — warn (≤5) */
+.attn-warn .attn-count { color: var(--yellow); }
+.attn-warn { border-left: 3px solid var(--yellow); }
+
+/* Severity accent — crit (>5) */
+.attn-crit .attn-count { color: var(--red); }
+.attn-crit { border-left: 3px solid var(--red); }
+
 /* Grid: activity (2/3) + side (1/3) */
 .hub-grid {
   display: grid;
