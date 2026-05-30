@@ -2171,7 +2171,7 @@ dialog details pre {
 
 .cmdk-row:hover,
 .cmdk-row--active {
-  background: rgba(99, 102, 241, .10);
+  background: color-mix(in srgb, var(--accent2) 10%, transparent);
 }
 
 .cmdk-row-badge {
@@ -2186,21 +2186,21 @@ dialog details pre {
 }
 
 .cmdk-badge-memory {
-  background: rgba(52, 211, 153, .12);
+  background: color-mix(in srgb, var(--green) 12%, transparent);
   color: var(--green);
-  border: 1px solid rgba(52, 211, 153, .2);
+  border: 1px solid color-mix(in srgb, var(--green) 20%, transparent);
 }
 
 .cmdk-badge-skill {
-  background: rgba(167, 139, 250, .12);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
   color: var(--accent);
-  border: 1px solid rgba(167, 139, 250, .2);
+  border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent);
 }
 
 .cmdk-badge-nav {
-  background: rgba(96, 165, 250, .10);
+  background: color-mix(in srgb, var(--blue) 10%, transparent);
   color: var(--blue);
-  border: 1px solid rgba(96, 165, 250, .18);
+  border: 1px solid color-mix(in srgb, var(--blue) 18%, transparent);
 }
 
 .cmdk-row-icon {

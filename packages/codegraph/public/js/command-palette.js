@@ -35,8 +35,15 @@ let _debounceTimer = null
 let _items = []             // flat list of selectable row objects { el, activate }
 let _activeIdx = -1         // currently highlighted row index
 let _paletteKeydown = null  // in-palette keydown handler reference (for cleanup)
+let _rowIdCounter = 0       // monotonic counter for unique row ids (aria-activedescendant)
 
 // ── Open / Close ─────────────────────────────────────────────────────────────
+
+// Toggle: close if currently open, otherwise open. Used by the ⌘K/Ctrl+K shortcut.
+export function toggleCommandPalette() {
+  if (_overlay) closeCommandPalette()
+  else openCommandPalette()
+}
 
 export function openCommandPalette() {
   // Single-instance guard
@@ -300,6 +307,7 @@ function _groupHeader(label) {
 
 function _makeRow(innerHtml, activate) {
   const el = document.createElement('div')
+  el.id = 'cmdk-row-' + (_rowIdCounter++)  // unique id so aria-activedescendant resolves
   el.className = 'cmdk-row'
   el.setAttribute('role', 'option')
   el.setAttribute('aria-selected', 'false')
