@@ -2558,29 +2558,34 @@ export async function renderWorkLog() {
 
 // ── Review Queue ──────────────────────────────────────────────────────────────
 
-export async function renderReview() {
+let _reviewPage = { limit: 100, offset: 0 }
+
+export async function renderReview(opts = {}) {
   const page = document.getElementById('page')
-  page.innerHTML = '<div class="section-title">Review Queue <span class="count">loading...</span></div>'
+  const silent = opts.silent === true
+  if (!silent) {
+    page.innerHTML = '<div class="section-title">Review Queue <span class="count">loading...</span></div>'
+  }
+  if (opts.resetPage) _reviewPage = { limit: 100, offset: 0 }
 
   let data
   try {
-    data = await api.get('/api/review/pending')
+    data = await api.get(`/api/review/pending?limit=${_reviewPage.limit}&offset=${_reviewPage.offset}`)
   } catch {
     page.innerHTML = '<p style="color:var(--red);padding:16px">Failed to load review queue.</p>'
     return
   }
 
-  const total = (data.memories?.length || 0) + (data.skills?.length || 0) +
-    (data.components?.length || 0) + (data.proposals?.length || 0) + (data.dsScans?.length || 0)
+  const t = data.totals || { memories: 0, skills: 0, components: 0, proposals: 0, dsScans: 0 }
+  const grandTotal = (t.memories || 0) + (t.skills || 0) + (t.components || 0) + (t.proposals || 0) + (t.dsScans || 0)
 
-  // Update badge
   const badge = document.getElementById('review-badge')
   if (badge) {
-    badge.textContent = total
-    badge.style.display = total > 0 ? 'inline' : 'none'
+    badge.textContent = grandTotal
+    badge.style.display = grandTotal > 0 ? 'inline' : 'none'
   }
 
-  if (total === 0) {
+  if (grandTotal === 0) {
     page.innerHTML = `
       <div class="section-title">Review Queue <span class="count">0 pending</span></div>
       <div class="card" style="text-align:center;padding:32px;color:var(--text-muted)">
@@ -2590,15 +2595,21 @@ export async function renderReview() {
     return
   }
 
+  const memShown = (data.memories?.length || 0)
+  const memMore = (t.memories || 0) > _reviewPage.offset + memShown
+
   page.innerHTML = `
-    <div class="section-title">Review Queue <span class="count">${total} pending</span></div>
+    <div class="section-title">Review Queue <span class="count">${grandTotal} pending</span></div>
     <div id="review-memories"></div>
     <div id="review-skills"></div>
     <div id="review-components"></div>
     <div id="review-proposals"></div>
+    ${memMore ? `<div style="text-align:center;margin:16px 0">
+      <button onclick="loadMoreReview()" style="padding:6px 16px;border-radius:6px;background:transparent;border:1px solid var(--border);color:var(--text-muted);font-size:12px;cursor:pointer">Load next ${_reviewPage.limit} memories</button>
+    </div>` : ''}
   `
 
-  renderReviewSection('review-memories', 'Memories', data.memories || [], (item) => ({
+  renderReviewSection('review-memories', 'Memories', data.memories || [], 'memory', t.memories, (item) => ({
     id: item.id,
     entityType: 'memory',
     title: `<span style="opacity:.6;font-size:11px">${item.type}</span> ${escHtml(item.context?.slice(0, 100) || '')}`,
@@ -2609,7 +2620,7 @@ export async function renderReview() {
     rejectLabel: 'Reject',
   }))
 
-  renderReviewSection('review-skills', 'Skills', data.skills || [], (item) => ({
+  renderReviewSection('review-skills', 'Skills', data.skills || [], 'skill', t.skills, (item) => ({
     id: item.name,
     entityType: 'skill',
     title: `<span style="opacity:.6;font-size:11px">${item.type}</span> ${escHtml(item.name)}`,
@@ -2620,7 +2631,7 @@ export async function renderReview() {
     rejectLabel: 'Deprecate draft',
   }))
 
-  renderReviewSection('review-components', 'Components', data.components || [], (item) => ({
+  renderReviewSection('review-components', 'Components', data.components || [], 'component', t.components, (item) => ({
     id: item.id,
     entityType: 'component',
     title: `<span style="opacity:.6;font-size:11px">${item.section_type}</span> ${escHtml(item.name)}`,
@@ -2634,28 +2645,46 @@ export async function renderReview() {
   renderProposalSection('review-proposals', data.proposals || [])
 }
 
-function renderReviewSection(containerId, label, items, mapper) {
+window.loadMoreReview = () => {
+  _reviewPage.offset += _reviewPage.limit
+  renderReview()
+}
+
+function renderReviewSection(containerId, label, items, sectionType, totalCount, mapper) {
   const el = document.getElementById(containerId)
   if (!el || !items.length) return
 
+  const sectionPlural = sectionType + 's'
+  const total = typeof totalCount === 'number' ? totalCount : items.length
+  const showingNote = total > items.length ? `showing ${items.length} of ${total}` : `${items.length}`
+
   el.innerHTML = `
-    <div class="card-title" style="margin:20px 0 8px;font-size:13px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted)">${label} <span class="count">(${items.length})</span></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin:20px 0 8px;gap:12px;flex-wrap:wrap">
+      <div class="card-title" style="font-size:13px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);margin:0">${label} <span class="count">(${showingNote})</span></div>
+      ${items.length > 1 ? `
+      <div style="display:flex;gap:6px">
+        <button onclick="reviewBulk('approve','${sectionPlural}')" style="padding:3px 10px;border-radius:6px;background:rgba(74,222,128,.08);border:1px solid var(--green);color:var(--green);font-size:11px;cursor:pointer">✓ Approve all visible</button>
+        <button onclick="reviewBulk('reject','${sectionPlural}')" style="padding:3px 10px;border-radius:6px;background:rgba(248,113,113,.08);border:1px solid var(--red);color:var(--red);font-size:11px;cursor:pointer">Reject all visible</button>
+      </div>` : ''}
+    </div>
+    <div data-review-section="${sectionPlural}">
     ${items.map(item => {
       const { id, title, body, meta, approveUrl, rejectUrl, rejectLabel, entityType } = mapper(item)
       const auditElId = `audit-${containerId}-${id}`.replace(/[^a-zA-Z0-9-]/g, '-')
       return `
-        <div class="card" style="margin-bottom:8px">
+        <div class="card" style="margin-bottom:8px" data-review-id="${escHtml(String(id))}">
           <div style="font-weight:600;margin-bottom:4px">${title}</div>
           ${meta ? `<div style="font-size:11px;color:var(--text-muted);margin-bottom:6px">${escHtml(meta)}</div>` : ''}
           <div style="font-size:12px;color:var(--text-secondary);margin-bottom:12px;line-height:1.5">${body}</div>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
             <button onclick="reviewAction('${approveUrl}', this)" style="padding:4px 14px;border-radius:6px;background:rgba(74,222,128,.12);border:1px solid var(--green);color:var(--green);font-size:12px;cursor:pointer;font-weight:600">✓ Approve</button>
             <button onclick="reviewAction('${rejectUrl}', this)" style="padding:4px 14px;border-radius:6px;background:rgba(248,113,113,.1);border:1px solid var(--red);color:var(--red);font-size:12px;cursor:pointer">${rejectLabel}</button>
-            <button onclick="loadAuditLog('${entityType || label.toLowerCase().slice(0,-1)}','${id}','${auditElId}')" style="padding:4px 10px;border-radius:6px;background:transparent;border:1px solid var(--border);color:var(--text-muted);font-size:11px;cursor:pointer">Log</button>
+            <button onclick="loadAuditLog('${entityType || sectionType}','${id}','${auditElId}')" style="padding:4px 10px;border-radius:6px;background:transparent;border:1px solid var(--border);color:var(--text-muted);font-size:11px;cursor:pointer">Log</button>
           </div>
           <div id="${auditElId}" style="margin-top:8px;font-size:11px;color:var(--text-dim)"></div>
         </div>`
-    }).join('')}`
+    }).join('')}
+    </div>`
 }
 
 async function loadAuditLog(entityType, entityId, elId) {

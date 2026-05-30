@@ -367,13 +367,36 @@ window.dismissScan = async (scanId) => {
 // ── Review Queue ──
 window.reviewAction = async (url, btn) => {
   if (btn) btn.disabled = true
+  const card = btn?.closest('.card')
   try {
     await api.post(url, {})
-    renderReview()
+    if (card) {
+      card.style.transition = 'opacity 180ms, transform 180ms, max-height 220ms'
+      card.style.opacity = '0'
+      card.style.transform = 'translateX(8px)'
+      card.style.maxHeight = card.offsetHeight + 'px'
+      requestAnimationFrame(() => { card.style.maxHeight = '0'; card.style.marginBottom = '0'; card.style.paddingTop = '0'; card.style.paddingBottom = '0' })
+      setTimeout(() => card.remove(), 240)
+    }
+    updateReviewBadge()
+    // background refresh so totals + next page items stay in sync
+    setTimeout(() => { if (location.hash === '#/review') renderReview({ silent: true }) }, 350)
   } catch {
     if (btn) btn.disabled = false
     alert('Action failed — check console.')
   }
+}
+
+window.reviewBulk = async (action, entityType) => {
+  const cards = document.querySelectorAll(`[data-review-section="${entityType}"] .card`)
+  if (!cards.length) return
+  if (!confirm(`${action === 'approve' ? 'Approve' : 'Reject'} all ${cards.length} visible ${entityType}?`)) return
+  const ids = Array.from(cards).map(c => c.dataset.reviewId).filter(Boolean)
+  for (const id of ids) {
+    const url = `/api/review/${entityType.slice(0, -1)}/${encodeURIComponent(id)}/${action}`
+    try { await api.post(url, {}) } catch { /* continue */ }
+  }
+  renderReview()
 }
 
 window.generateSkillUpdate = async (proposalId, btn) => {

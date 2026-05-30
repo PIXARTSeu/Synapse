@@ -18,12 +18,14 @@ import type { RouteContext } from './index.js'
 export function createReviewRouter(ctx: RouteContext): Router {
   const router = Router()
 
-  router.get('/api/review/pending', (_req, res) => {
+  router.get('/api/review/pending', (req, res) => {
     const db = openDb(ctx.skillbrainRoot)
+    const limit = Math.min(Number(req.query.limit) || 100, 500)
+    const offset = Math.max(Number(req.query.offset) || 0, 0)
     try {
       const memories = db.prepare(
-        `SELECT id, type, context, solution, skill, tags, created_at FROM memories WHERE status = 'pending-review' ORDER BY created_at DESC LIMIT 50`
-      ).all()
+        `SELECT id, type, context, solution, skill, tags, created_at FROM memories WHERE status = 'pending-review' ORDER BY created_at DESC LIMIT ? OFFSET ?`
+      ).all(limit, offset)
       const skills = db.prepare(
         `SELECT name, category, description, type, updated_at FROM skills WHERE status = 'pending' ORDER BY updated_at DESC`
       ).all()
@@ -42,7 +44,14 @@ export function createReviewRouter(ctx: RouteContext): Router {
           `SELECT * FROM design_system_scans WHERE status = 'pending' ORDER BY scanned_at DESC`
         ).all()
       } catch { /* ignore */ }
-      res.json({ memories, skills, components, proposals, dsScans })
+      const totals = {
+        memories: (db.prepare(`SELECT COUNT(*) as n FROM memories WHERE status='pending-review'`).get() as any).n,
+        skills: (db.prepare(`SELECT COUNT(*) as n FROM skills WHERE status='pending'`).get() as any).n,
+        components: (db.prepare(`SELECT COUNT(*) as n FROM ui_components WHERE status='pending'`).get() as any).n,
+        proposals: proposals.length,
+        dsScans: dsScans.length,
+      }
+      res.json({ memories, skills, components, proposals, dsScans, totals, page: { limit, offset } })
     } finally {
       closeDb(db)
     }
