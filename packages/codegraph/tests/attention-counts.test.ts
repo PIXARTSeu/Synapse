@@ -98,8 +98,8 @@ describe('computeAttentionCounts', () => {
     ).run('comp-1', 'test-project', 'MyComp', 'hero', 'pending')
 
     const result = computeAttentionCounts(db)
-    // 2 memory + 1 skill + 1 component = 4 (plus any proposals/dsScans from migrations)
-    expect(result.pendingReviews).toBeGreaterThanOrEqual(4)
+    // 2 memory + 1 skill + 1 component = 4 (proposals/dsScans tables are empty on a fresh DB)
+    expect(result.pendingReviews).toBe(4)
   })
 
   it('does not throw when skill_proposals / design_system_scans tables are absent', () => {

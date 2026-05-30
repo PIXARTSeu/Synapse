@@ -68,6 +68,9 @@ const SMTP_SECURE  = process.env.SMTP_SECURE === 'true'
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || ''
 const LEGACY_TOKEN_USER_EMAIL = process.env.LEGACY_TOKEN_USER_EMAIL || ''
 
+// Memories whose last update is older than this many days are flagged "stale".
+const STALE_DAYS = 90
+
 // ── Password helpers ──
 const scryptAsync = promisify(crypto.scrypt)
 
@@ -159,7 +162,7 @@ export function computeAttentionCounts(db: import('better-sqlite3').Database): {
   staleCount: number
   pendingReviews: number
 } {
-  const staleCutoff = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString()
+  const staleCutoff = new Date(Date.now() - STALE_DAYS * 24 * 60 * 60 * 1000).toISOString()
 
   const decayCount = (db.prepare(
     `SELECT COUNT(*) AS n FROM memories WHERE status = 'active' AND confidence IS NOT NULL AND confidence < 4`
@@ -544,8 +547,11 @@ export async function startHttpServer(port: number, authToken?: string): Promise
     let attentionCounts = { decayCount: 0, staleCount: 0, pendingReviews: 0 }
     try {
       const db = openDb(SKILLBRAIN_ROOT)
-      attentionCounts = computeAttentionCounts(db)
-      closeDb(db)
+      try {
+        attentionCounts = computeAttentionCounts(db)
+      } finally {
+        closeDb(db)
+      }
     } catch { /* ignore — non-critical */ }
     res.json({
       status: 'ok',
