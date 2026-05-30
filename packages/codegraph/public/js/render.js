@@ -64,14 +64,17 @@ function greetingLine(name) {
 const KEY_CLICK = `onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click()}"`
 
 let _hubRefreshTimer = null
+let _hubVisibilityHandler = null
 
 function clearHubRefresh() {
   if (_hubRefreshTimer) { clearInterval(_hubRefreshTimer); _hubRefreshTimer = null }
+  if (_hubVisibilityHandler) { document.removeEventListener('visibilitychange', _hubVisibilityHandler); _hubVisibilityHandler = null }
 }
 
 async function refreshHubLive() {
   const hash = location.hash || '#/'
   if (hash !== '#/' && hash !== '#' && hash !== '#/home') { clearHubRefresh(); return }
+  if (document.visibilityState === 'hidden') return
   try {
     const health = await SAFE(api.get('/api/health'))
     const memVal = document.querySelector('.hub-kpi-purple .hub-kpi-val')
@@ -169,17 +172,16 @@ export async function renderHome() {
   const pageEl = document.getElementById('page')
   pageEl.innerHTML = hubSkeleton()
 
-  const [health, data, me, memR, sessR, review, skillsR] = await Promise.all([
+  const [health, data, me, memR, sessR, skillsR] = await Promise.all([
     SAFE(api.get('/api/health')),
     SAFE(api.get('/api/data')),
     SAFE(api.get('/api/me')),
     SAFE(api.get('/api/memories?limit=100')),
     SAFE(api.get('/api/sessions?limit=20')),
-    SAFE(api.get('/api/review/pending')),
     SAFE(api.get('/api/skills?limit=1')),
   ])
 
-  const userName = (me.user?.name?.split(' ')[0]) || 'Daniel'
+  const userName = (me.user?.name?.split(' ')[0]) || 'there'
   const memories = memR.memories || []
   const sessions = sessR.sessions || []
   const skillsTotal = skillsR.total || 0
@@ -262,8 +264,7 @@ export async function renderHome() {
     const ts = m.updatedAt || m.updated_at || m.createdAt || m.created_at
     return ts && daysSince(ts) > 90
   }).length
-  const reviewTotal = health.pendingReviews ?? ((review.memories?.length || 0) + (review.skills?.length || 0) +
-    (review.components?.length || 0) + (review.proposals?.length || 0) + (review.dsScans?.length || 0))
+  const reviewTotal = health.pendingReviews ?? 0
 
   const dotClass = (n) => n === 0 ? 'health-dot-ok' : n <= 5 ? 'health-dot-warn' : 'health-dot-crit'
 
@@ -370,7 +371,7 @@ export async function renderHome() {
     <section class="hub-grid">
       <div class="hub-col-main">
         <div class="card hub-activity">
-          <div class="card-title">Recent activity <span class="count">${top.length}</span></div>
+          <div class="card-title">Recent memories &amp; sessions <span class="count">${top.length}</span></div>
           ${activityHtml}
         </div>
       </div>
@@ -410,6 +411,17 @@ export async function renderHome() {
 
   // Live refresh every 30s — auto-clears when user navigates away
   _hubRefreshTimer = setInterval(refreshHubLive, 30000)
+
+  // Pause polling while tab is hidden; trigger an immediate refresh on tab return
+  // Guard against double-registration across re-renders
+  if (_hubVisibilityHandler) { document.removeEventListener('visibilitychange', _hubVisibilityHandler) }
+  _hubVisibilityHandler = () => {
+    if (document.visibilityState === 'visible') {
+      const hash = location.hash || '#/'
+      if (hash === '#/' || hash === '#' || hash === '#/home') refreshHubLive()
+    }
+  }
+  document.addEventListener('visibilitychange', _hubVisibilityHandler)
 }
 
 // ── Skills ──
