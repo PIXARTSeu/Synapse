@@ -264,6 +264,8 @@ export async function renderHome() {
     const ts = m.updatedAt || m.updated_at || m.createdAt || m.created_at
     return ts && daysSince(ts) > 90
   }).length
+  // No local fallback like decay/stale: /api/review/pending was dropped this phase.
+  // /api/health always returns pendingReviews (0 even on DB error), so ?? 0 is just a SAFE-{} guard.
   const reviewTotal = health.pendingReviews ?? 0
 
   const dotClass = (n) => n === 0 ? 'health-dot-ok' : n <= 5 ? 'health-dot-warn' : 'health-dot-crit'
