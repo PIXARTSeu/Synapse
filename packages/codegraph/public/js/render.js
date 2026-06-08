@@ -71,6 +71,53 @@ function clearHubRefresh() {
   if (_hubVisibilityHandler) { document.removeEventListener('visibilitychange', _hubVisibilityHandler); _hubVisibilityHandler = null }
 }
 
+// Builds the "Needs attention" band HTML from the three counts. Shared by the
+// initial renderHome() and the 30s refreshHubLive() so the band stays in sync with
+// the adjacent System Health rows instead of freezing at its first-render value.
+function buildAttnBand(reviewTotal, decayCount, staleCount) {
+  const attnItems = []
+  if (reviewTotal > 0) attnItems.push({
+    count: reviewTotal,
+    label: reviewTotal === 1 ? 'Pending review' : 'Pending reviews',
+    hint: 'Approve or reject queued items',
+    target: '#/review',
+  })
+  if (decayCount > 0) attnItems.push({
+    count: decayCount,
+    label: decayCount === 1 ? 'Decaying memory' : 'Decaying memories',
+    hint: 'Confidence dropped through real decay',
+    target: '#/memories',
+  })
+  if (staleCount > 0) attnItems.push({
+    count: staleCount,
+    label: staleCount === 1 ? 'Stale memory' : 'Stale memories',
+    hint: 'Not updated in 90+ days',
+    target: '#/memories',
+  })
+  if (attnItems.length === 0) return ''
+  return `
+    <div class="hub-attention">
+      <div class="hub-attention-head">
+        <span class="hub-attention-icon">${HUB_ICONS.warn}</span>
+        Needs attention
+      </div>
+      ${attnItems.map(item => {
+        const sev = item.count <= 5 ? 'attn-warn' : 'attn-crit'
+        return `<div class="hub-attention-item ${sev}" tabindex="0" role="button"
+          aria-label="${item.label}: ${item.count}"
+          onclick="location.hash='${item.target}'" ${KEY_CLICK}>
+          <span class="attn-count">${item.count}</span>
+          <div class="attn-body">
+            <span class="attn-label">${item.label}</span>
+            <span class="attn-hint">${item.hint}</span>
+          </div>
+          <span class="attn-arrow">${HUB_ICONS.arrow}</span>
+        </div>`
+      }).join('')}
+    </div>
+  `
+}
+
 async function refreshHubLive() {
   const hash = location.hash || '#/'
   if (hash !== '#/' && hash !== '#' && hash !== '#/home') { clearHubRefresh(); return }
@@ -106,6 +153,33 @@ async function refreshHubLive() {
         dot.className = 'health-dot ' + (staleCount === 0 ? 'health-dot-ok' : staleCount <= 5 ? 'health-dot-warn' : 'health-dot-crit')
       }
     }
+    // Keep the "Needs attention" band in sync with the health rows. It was built once
+    // by renderHome and otherwise frozen, so it would diverge from the live "Pending
+    // reviews"/"Decay" rows (and never disappear when a count dropped to 0).
+    const freshBand = buildAttnBand(
+      reviewTotal,
+      typeof health.decayCount === 'number' ? health.decayCount : 0,
+      typeof health.staleCount === 'number' ? health.staleCount : 0,
+    )
+    const attnHost = document.querySelector('.hub-attention')
+    if (attnHost) {
+      if (freshBand) {
+        const tmp = document.createElement('template')
+        tmp.innerHTML = freshBand.trim()
+        attnHost.replaceWith(tmp.content.firstElementChild)
+      } else {
+        attnHost.remove()
+      }
+    } else if (freshBand) {
+      // Count went 0 -> >0 since first render: insert the band right after the greeting.
+      const greeting = document.querySelector('.hub-hero .hub-greeting-line')
+      if (greeting) {
+        const tmp = document.createElement('template')
+        tmp.innerHTML = freshBand.trim()
+        greeting.insertAdjacentElement('afterend', tmp.content.firstElementChild)
+      }
+    }
+
     const uptimeStrong = document.querySelector('.health-footer span:first-child strong')
     if (uptimeStrong) uptimeStrong.textContent = formatUptime(health.uptime || 0)
     const statusEl = document.getElementById('server-status')
@@ -277,7 +351,14 @@ export async function renderHome() {
   `).join('') || '<p style="color:var(--text-muted);font-size:12px">No memories yet.</p>'
 
   // ── System Health ──
-  const decayCount = health.decayCount ?? memories.filter(m => (m.confidence ?? 10) < 4).length
+  // Mirror the server predicate (http-server.ts computeAttentionCounts): a memory is
+  // "decaying" only if it actually aged (sessions_since_validation >= 5), not merely
+  // born below the confidence threshold. Excludes the M-_system_* metadata row.
+  const decayCount = health.decayCount ?? memories.filter(m =>
+    (m.confidence ?? 10) < 4 &&
+    (m.sessionsSinceValidation ?? 0) >= 5 &&
+    !(m.id || '').startsWith('M-_system_')
+  ).length
   const staleCount = health.staleCount ?? memories.filter(m => {
     const ts = m.updatedAt || m.updated_at || m.createdAt || m.created_at
     return ts && daysSince(ts) > 90
@@ -297,48 +378,8 @@ export async function renderHome() {
     ? `openProjectDetail('${escHtml(resumeProject)}')`
     : recentSession ? `location.hash='#/sessions'` : ''
 
-  // ── Attention band ──
-  const attnItems = []
-  if (reviewTotal > 0) attnItems.push({
-    count: reviewTotal,
-    label: reviewTotal === 1 ? 'Pending review' : 'Pending reviews',
-    hint: 'Approve or reject queued items',
-    target: '#/review',
-  })
-  if (decayCount > 0) attnItems.push({
-    count: decayCount,
-    label: decayCount === 1 ? 'Decaying memory' : 'Decaying memories',
-    hint: 'Confidence below 4',
-    target: '#/memories',
-  })
-  if (staleCount > 0) attnItems.push({
-    count: staleCount,
-    label: staleCount === 1 ? 'Stale memory' : 'Stale memories',
-    hint: 'Not updated in 90+ days',
-    target: '#/memories',
-  })
-
-  const attnBand = attnItems.length === 0 ? '' : `
-    <div class="hub-attention">
-      <div class="hub-attention-head">
-        <span class="hub-attention-icon">${HUB_ICONS.warn}</span>
-        Needs attention
-      </div>
-      ${attnItems.map(item => {
-        const sev = item.count <= 5 ? 'attn-warn' : 'attn-crit'
-        return `<div class="hub-attention-item ${sev}" tabindex="0" role="button"
-          aria-label="${item.label}: ${item.count}"
-          onclick="location.hash='${item.target}'" ${KEY_CLICK}>
-          <span class="attn-count">${item.count}</span>
-          <div class="attn-body">
-            <span class="attn-label">${item.label}</span>
-            <span class="attn-hint">${item.hint}</span>
-          </div>
-          <span class="attn-arrow">${HUB_ICONS.arrow}</span>
-        </div>`
-      }).join('')}
-    </div>
-  `
+  // ── Attention band ── (built via shared buildAttnBand so refreshHubLive can rebuild it)
+  const attnBand = buildAttnBand(reviewTotal, decayCount, staleCount)
 
   pageEl.innerHTML = `
     <section class="hub-hero">
@@ -404,7 +445,7 @@ export async function renderHome() {
           <div class="card-title">System health</div>
           <div class="health-row" data-health="decay" tabindex="0" role="button" aria-label="Decay alerts: ${decayCount}" onclick="location.hash='#/memories'" ${KEY_CLICK}>
             <span class="health-dot ${dotClass(decayCount)}"></span>
-            <span class="health-row-label">Decay alerts <span class="health-row-hint">(conf &lt; 4)</span></span>
+            <span class="health-row-label">Decay alerts <span class="health-row-hint">(conf &lt; 4 · aged)</span></span>
             <span class="health-row-val">${decayCount}</span>
           </div>
           <div class="health-row" data-health="review" tabindex="0" role="button" aria-label="Pending reviews: ${reviewTotal}" onclick="location.hash='#/review'" ${KEY_CLICK}>
@@ -767,6 +808,7 @@ export async function openMemoryDetail(id, openDetailFn) {
       <span style="color:var(--text-muted);font-size:11px;margin-left:8px">${m.skill || ''} &middot; ${m.scope}</span>
     </div>
     <div style="display:flex;gap:8px;margin-bottom:12px">
+      ${(m.confidence ?? 10) < 10 ? `<button onclick="reinforceMemory('${m.id}')" title="Confidence +1 and reset staleness — keep this memory healthy" style="padding:4px 12px;border-radius:6px;background:rgba(52,211,153,.1);border:1px solid var(--green);color:var(--green);font-size:11px;cursor:pointer">Reinforce</button>` : ''}
       <button onclick="deprecateMemory('${m.id}')" style="padding:4px 12px;border-radius:6px;background:rgba(245,158,11,.1);border:1px solid var(--yellow);color:var(--yellow);font-size:11px;cursor:pointer">Deprecate</button>
       <button onclick="deleteMemory('${m.id}')" style="padding:4px 12px;border-radius:6px;background:rgba(248,113,113,.1);border:1px solid var(--red);color:var(--red);font-size:11px;cursor:pointer">Delete</button>
     </div>

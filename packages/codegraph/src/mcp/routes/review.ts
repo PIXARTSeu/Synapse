@@ -60,8 +60,15 @@ export function createReviewRouter(ctx: RouteContext): Router {
   router.post('/api/review/memory/:id/approve', (req, res) => {
     const db = openDb(ctx.skillbrainRoot)
     const now = new Date().toISOString()
-    db.prepare(`UPDATE memories SET status = 'active', updated_at = ? WHERE id = ?`)
-      .run(now, req.params.id)
+    // Reset the staleness counter on approve. A memory lands in 'pending-review'
+    // because markPendingReview fired (sessions_since_validation >= 15). If we only
+    // flip status back to 'active', the very next 24h decay cycle increments ssv and
+    // markPendingReview re-flags it — so the approval never sticks and the queue never
+    // drains. Treating a human approval as a validation event (ssv=0 + last_validated)
+    // mirrors reinforceMemory, minus the confidence bump (approve = "leave it", not
+    // "this proved useful"). The memory must now age 15 fresh cycles before re-queuing.
+    db.prepare(`UPDATE memories SET status = 'active', sessions_since_validation = 0, last_validated = ?, updated_at = ? WHERE id = ?`)
+      .run(now, now, req.params.id)
     new AuditStore(db).log({ entityType: 'memory', entityId: req.params.id, action: 'approve', reviewedBy: (req as any).userId ?? 'unknown' })
     closeDb(db)
     res.json({ ok: true })

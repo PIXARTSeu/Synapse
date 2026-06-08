@@ -164,8 +164,20 @@ export function computeAttentionCounts(db: import('better-sqlite3').Database): {
 } {
   const staleCutoff = new Date(Date.now() - STALE_DAYS * 24 * 60 * 60 * 1000).toISOString()
 
+  // "Decaying" must mean a memory that has ACTUALLY decayed — not one merely born
+  // below the threshold. New memories are created with low confidence (default 1),
+  // and applyDecay only lowers confidence once sessions_since_validation >= 5, so the
+  // bare `confidence < 4` predicate counted every fresh/unvalidated memory as
+  // "decaying" — definitional noise that could never be cleared. Requiring
+  // ssv >= 5 means the row went through >=5 unvalidated decay cycles. The system
+  // metadata row (M-_system_*) is excluded for parity with allActive().
   const decayCount = (db.prepare(
-    `SELECT COUNT(*) AS n FROM memories WHERE status = 'active' AND confidence IS NOT NULL AND confidence < 4`
+    `SELECT COUNT(*) AS n FROM memories
+      WHERE status = 'active'
+        AND confidence IS NOT NULL
+        AND confidence < 4
+        AND sessions_since_validation >= 5
+        AND id NOT LIKE 'M-_system_%'`
   ).get() as { n: number }).n
 
   const staleCount = (db.prepare(

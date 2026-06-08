@@ -185,10 +185,15 @@ export function registerSessionTools(server: McpServer, ctx: ToolContext): void 
           if (memIds.length >= 2) {
             const propId = `SP-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
             try {
-              ;(store as any).db.prepare(
+              // The partial unique index idx_skill_proposals_open (migration 034)
+              // enforces one OPEN proposal per skill, so OR IGNORE now actually
+              // dedups across sessions. Only report a proposal as "created" when a
+              // row was truly inserted — otherwise every session would re-announce
+              // the same pending proposal that nothing cleared.
+              const info = (store as any).db.prepare(
                 `INSERT OR IGNORE INTO skill_proposals (id, skill_name, session_id, memory_ids) VALUES (?, ?, ?, ?)`
               ).run(propId, skillName, sessionId, JSON.stringify(memIds))
-              created.push(skillName)
+              if (info.changes > 0) created.push(skillName)
             } catch { /* table may not exist yet in old DBs */ }
           }
         }

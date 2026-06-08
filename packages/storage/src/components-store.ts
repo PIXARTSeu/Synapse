@@ -410,6 +410,28 @@ export class ComponentsStore {
     conflicts: Conflict[]
   }): DesignSystemScan {
     const now = new Date().toISOString()
+    // One OPEN scan per project (partial unique index idx_dss_open, migration 034).
+    // session_start re-scans on every run; without this, an unresolved-conflict
+    // project stacked a brand-new pending scan each session and flooded the review
+    // queue. If an open scan already exists, refresh it in place with the latest
+    // conflict data instead of inserting a duplicate.
+    const existing = this.db.prepare(
+      `SELECT id FROM design_system_scans WHERE project = ? AND status = 'pending' LIMIT 1`
+    ).get(scan.project) as { id: string } | undefined
+    if (existing) {
+      this.db.prepare(`
+        UPDATE design_system_scans
+           SET scanned_at = ?, sources = ?, merged = ?, conflicts = ?
+         WHERE id = ?
+      `).run(
+        now,
+        JSON.stringify(scan.sources),
+        JSON.stringify(scan.merged),
+        JSON.stringify(scan.conflicts),
+        existing.id,
+      )
+      return { id: existing.id, scannedAt: now, status: 'pending' as const, ...scan }
+    }
     const id = `DSS-${randomId()}`
     this.db.prepare(`
       INSERT INTO design_system_scans (id, project, scanned_at, sources, merged, conflicts, status)

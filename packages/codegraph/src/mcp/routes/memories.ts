@@ -116,5 +116,23 @@ export function createMemoriesRouter(ctx: RouteContext): Router {
     }
   })
 
+  // Non-destructive "Reinforce / Keep" action: bumps confidence +1 and resets the
+  // staleness counter so a valuable low-confidence memory can be rehabilitated from
+  // the dashboard instead of only Deprecate/Delete. Also doubles as the human
+  // counterpart to the auto-decay's pending-review flagging.
+  router.post('/api/memories/:id/reinforce', (req, res) => {
+    const userId = (req as any).userId as string | undefined
+    try {
+      const db = openDb(ctx.skillbrainRoot)
+      const store = new MemoryStore(db)
+      const ok = store.reinforce(req.params.id, userId)
+      closeDb(db)
+      if (!ok) { res.status(404).json({ error: 'Memory not found' }); return }
+      res.json({ ok: true })
+    } catch (err: any) {
+      res.status(500).json({ error: err.message })
+    }
+  })
+
   return router
 }
