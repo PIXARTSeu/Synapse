@@ -183,6 +183,12 @@ async function deprecateMemory(id) {
   else alert('Update failed')
 }
 
+async function reinforceMemory(id) {
+  const r = await fetch(`/api/memories/${encodeURIComponent(id)}/reinforce`, { method: 'POST' })
+  if (r.ok) { closeDetail(); route() }
+  else alert('Reinforce failed')
+}
+
 // ── Session actions ──
 async function cleanupDuplicates() {
   if (!confirm('Delete duplicate in-progress sessions (keeps most recent per project)?')) return
@@ -346,6 +352,7 @@ window.removeStackTag = removeStackTag
 window.addMemberRow = addMemberRow
 window.deleteMemory = deleteMemory
 window.deprecateMemory = deprecateMemory
+window.reinforceMemory = reinforceMemory
 window.cleanupDuplicates = cleanupDuplicates
 window.deleteSession = deleteSession
 window.loadEnvVars = loadEnvVars
@@ -436,8 +443,12 @@ window.applySkillUpdate = async (proposalId, btn) => {
 async function updateReviewBadge() {
   try {
     const data = await api.get('/api/review/pending')
-    const total = (data.memories?.length || 0) + (data.skills?.length || 0) +
-      (data.components?.length || 0) + (data.proposals?.length || 0) + (data.dsScans?.length || 0)
+    // Use the authoritative `totals` object, not array lengths: the memories query is
+    // LIMITed (default 100), so .length undercounts the badge once >100 are pending —
+    // exactly the backlog scenario. renderReview already uses data.totals; match it.
+    const t = data.totals || {}
+    const total = (t.memories || 0) + (t.skills || 0) +
+      (t.components || 0) + (t.proposals || 0) + (t.dsScans || 0)
     const badge = document.getElementById('review-badge')
     if (badge) {
       badge.textContent = total

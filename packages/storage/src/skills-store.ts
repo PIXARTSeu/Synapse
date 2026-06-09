@@ -105,9 +105,33 @@ export class SkillsStore {
 
   private prepareStatements() {
     return {
+      // INSERT OR REPLACE deletes the existing row and inserts a fresh one, so any
+      // column NOT listed here reverts to its schema default. The original statement
+      // omitted the five autolearning columns (confidence, usage_count, useful_count,
+      // sessions_since_validation, last_validated), silently wiping all skill decay/
+      // reinforcement state on EVERY write — re-import, dashboard edit, skill_update,
+      // and proposal-apply. We COALESCE each from the existing row (same pattern the
+      // statement already used for created_by_user_id) so accumulated learning
+      // survives a replace. `status` is likewise COALESCE'd: callers that pass an
+      // explicit status (dashboard edit, skill_add/update, soft-delete, proposal
+      // apply) keep that value; the importer passes NULL, so a re-import preserves the
+      // skill's current status instead of forcing every skill back to 'active'
+      // (which previously resurrected soft-deleted/deprecated skills and auto-approved
+      // pending ones). New skills (no existing row) still default to 'active'.
       upsert: this.db.prepare(`
-        INSERT OR REPLACE INTO skills (name, category, description, content, type, tags, lines, updated_at, status, created_by_user_id, updated_by_user_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE((SELECT created_by_user_id FROM skills WHERE name = ?), ?), ?)
+        INSERT OR REPLACE INTO skills
+          (name, category, description, content, type, tags, lines, updated_at, status,
+           created_by_user_id, updated_by_user_id,
+           confidence, usage_count, useful_count, sessions_since_validation, last_validated)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?,
+          COALESCE(?, (SELECT status FROM skills WHERE name = ?), 'active'),
+          COALESCE((SELECT created_by_user_id FROM skills WHERE name = ?), ?),
+          ?,
+          COALESCE((SELECT confidence               FROM skills WHERE name = ?), 5),
+          COALESCE((SELECT usage_count              FROM skills WHERE name = ?), 0),
+          COALESCE((SELECT useful_count             FROM skills WHERE name = ?), 0),
+          COALESCE((SELECT sessions_since_validation FROM skills WHERE name = ?), 0),
+          (SELECT last_validated FROM skills WHERE name = ?))
       `),
       get: this.db.prepare('SELECT * FROM skills WHERE name = ?'),
       getUpdatedAt: this.db.prepare('SELECT updated_at FROM skills WHERE name = ?'),
@@ -262,9 +286,14 @@ export class SkillsStore {
     this.stmts.upsert.run(
       skill.name, skill.category, skill.description, skill.content,
       skill.type, JSON.stringify(skill.tags), skill.lines, skill.updatedAt,
-      skill.status ?? 'active',
-      skill.name, skill.createdByUserId ?? null,
-      changedBy ?? null,
+      skill.status ?? null, skill.name,            // status: explicit value, else preserve existing, else 'active'
+      skill.name, skill.createdByUserId ?? null,   // created_by_user_id: preserve existing on replace
+      changedBy ?? null,                           // updated_by_user_id
+      skill.name,                                  // confidence: preserve
+      skill.name,                                  // usage_count: preserve
+      skill.name,                                  // useful_count: preserve
+      skill.name,                                  // sessions_since_validation: preserve
+      skill.name,                                  // last_validated: preserve
     )
 
     this.saveVersion(skill, changedBy ?? null, reason)

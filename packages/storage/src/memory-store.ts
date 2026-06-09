@@ -760,6 +760,23 @@ export class MemoryStore {
 
   // ── Decay ─────────────────────────────────────────
 
+  /**
+   * Manually reinforce a single memory — the non-destructive "Keep / Reinforce"
+   * action exposed in the dashboard. Bumps confidence +1 (capped at 10), resets
+   * sessions_since_validation to 0, and appends `by` to validated_by. This is the
+   * only dashboard path that can RAISE a memory's confidence; previously the UI
+   * could only Deprecate/Delete, so a valuable-but-low-confidence memory had no
+   * non-destructive remedy. Returns false if the id does not exist.
+   */
+  reinforce(id: string, by?: string): boolean {
+    const mem = this.get(id)
+    if (!mem) return false
+    const now = new Date().toISOString()
+    const newValidatedBy = [...mem.validatedBy, by ?? 'dashboard']
+    this.stmts.reinforceMemory.run(now, JSON.stringify(newValidatedBy), now, id)
+    return true
+  }
+
   applyDecay(validatedIds: string[], sessionDate: string): DecayResult {
     const now = new Date().toISOString()
     let reinforced = 0

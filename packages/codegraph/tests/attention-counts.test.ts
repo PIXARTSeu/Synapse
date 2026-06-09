@@ -40,19 +40,41 @@ describe('computeAttentionCounts', () => {
     expect(result.pendingReviews).toBe(0)
   })
 
-  it('counts decayCount: active memories with confidence < 4', () => {
-    // confidence 3 (active) — should be counted
-    store.add({ type: 'Pattern', context: 'ctx-decay', problem: '', solution: 'sol', reason: '', tags: [], confidence: 3 })
-    // confidence 4 — boundary, should NOT be counted (< 4, not <= 4)
-    store.add({ type: 'Pattern', context: 'ctx-boundary', problem: '', solution: 'sol', reason: '', tags: [], confidence: 4 })
+  it('counts decayCount: active memories with confidence < 4 that have ACTUALLY decayed (ssv >= 5)', () => {
+    // confidence 3, aged (ssv >= 5) — should be counted (real decay)
+    const m1 = store.add({ type: 'Pattern', context: 'ctx-decay', problem: '', solution: 'sol', reason: '', tags: [], confidence: 3 })
+    db.prepare('UPDATE memories SET sessions_since_validation = 6 WHERE id = ?').run(m1.id)
+    // confidence 4, aged — boundary, should NOT be counted (< 4, not <= 4)
+    const m2 = store.add({ type: 'Pattern', context: 'ctx-boundary', problem: '', solution: 'sol', reason: '', tags: [], confidence: 4 })
+    db.prepare('UPDATE memories SET sessions_since_validation = 6 WHERE id = ?').run(m2.id)
     // confidence 7 — should NOT be counted
     store.add({ type: 'Pattern', context: 'ctx-healthy', problem: '', solution: 'sol', reason: '', tags: [], confidence: 7 })
     // confidence 2, deprecated — should NOT be counted (not active)
     const m4 = store.add({ type: 'Pattern', context: 'ctx-dep', problem: '', solution: 'sol', reason: '', tags: [], confidence: 2 })
-    db.prepare("UPDATE memories SET status = 'deprecated' WHERE id = ?").run(m4.id)
+    db.prepare("UPDATE memories SET status = 'deprecated', sessions_since_validation = 6 WHERE id = ?").run(m4.id)
 
     const result = computeAttentionCounts(db)
     expect(result.decayCount).toBe(1)
+  })
+
+  it('decayCount excludes BORN-low-confidence memories that have not aged (ssv < 5)', () => {
+    // Fresh low-confidence memories (the common case: created at default/seed confidence)
+    // are NOT decay — they have ssv 0/1 and must not pollute the "decaying" signal.
+    store.add({ type: 'Pattern', context: 'born-low-1', problem: '', solution: 'sol', reason: '', tags: [], confidence: 1 })
+    store.add({ type: 'Pattern', context: 'born-low-2', problem: '', solution: 'sol', reason: '', tags: [], confidence: 3 })
+
+    const result = computeAttentionCounts(db)
+    expect(result.decayCount).toBe(0)
+  })
+
+  it('decayCount excludes the M-_system_ metadata row even if low confidence', () => {
+    const m = store.add({ type: 'Fact', context: 'sys', problem: '', solution: 'sol', reason: '', tags: [], confidence: 1 })
+    // Rename to a system id and age it — must still be excluded.
+    db.prepare("UPDATE memories SET id = 'M-_system_decay_last_run', sessions_since_validation = 99 WHERE id = ?").run(m.id)
+    db.prepare("UPDATE memories SET confidence = 1 WHERE id = 'M-_system_decay_last_run'")
+
+    const result = computeAttentionCounts(db)
+    expect(result.decayCount).toBe(0)
   })
 
   it('counts staleCount: active memories with COALESCE(updated_at, created_at) older than 90 days', () => {
