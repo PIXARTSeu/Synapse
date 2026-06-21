@@ -1,232 +1,414 @@
 ---
 name: seo-geo
 description: >
-  Optimize content for AI Overviews (formerly SGE), ChatGPT web search,
-  Perplexity, and other AI-powered search experiences. Generative Engine
-  Optimization (GEO) analysis including brand mention signals, AI crawler
-  accessibility, llms.txt compliance, passage-level citability scoring, and
-  platform-specific optimization. Use when user says "AI Overviews", "SGE",
+  Generative Engine Optimization (GEO) — audit and implementation for AI search
+  surfaces: Google AI Overviews and AI Mode, ChatGPT search, Perplexity, Bing
+  Copilot. Covers AI-crawler accessibility, question-based citability scoring,
+  passage extraction, server-side rendering checks for AI bots, llms.txt (with
+  the primary-source caveat on real support), agent-friendly page checks, and a
+  0-100 scoring rubric. Use when user says "AI Overviews", "AI Mode", "SGE",
   "GEO", "AI search", "LLM optimization", "Perplexity", "AI citations",
-  "ChatGPT search", or "AI visibility".
-version: 1.0.0
+  "ChatGPT search", "agent-friendly", or "AI visibility". Triggers on: GEO,
+  AEO, AI Overviews, AI Mode, generative engine optimization, llms.txt,
+  AI crawler, citability, Perplexity, ChatGPT search.
+version: 1.1.0
 ---
 
-# AI Search / GEO Optimization (February 2026)
+# AI Search / GEO Optimization
 
-## Key Statistics
+GEO is the practice of making content **extractable and citable** by AI search
+surfaces. This skill is the technical/audit + implementation half: crawler
+access, render strategy, passage citability, and a falsifiable scoring rubric.
+
+For the broader content-strategy and AI-visibility-monitoring side (competitive
+citation tracking, content briefs, getting cited as a source over time), see the
+**ai-seo** skill — cross-reference it, don't duplicate it here.
+
+## Primary Source: Google's AI Optimization Guidance
+
+Google's own position (Search Central): **optimizing for generative AI search is
+still SEO.** "AEO" and "GEO" are mostly rebranded labels for the same
+fundamentals — quality content, crawlable/indexable pages, good structure,
+unique value. Frame GEO findings as **SEO fundamentals applied to AI-search
+surfaces**, not as a separate discipline.
+
+Things Google has explicitly said do *not* move the needle (treat community
+advice that contradicts this with skepticism, and note the contradiction in any
+report):
+
+- `llms.txt` is **not** a citation/ranking signal for Google's AI search.
+- Artificially chunking content for "AI parsing" is unnecessary.
+- AI-rephrasing existing copy to sound "LLM-friendly" does not help.
+- Mention-farming / coordinated brand-mention campaigns are not a ranking lever.
+
+The durable test for any page is the classic quality framing — **Who** made it
+(real expertise/authorship), **How** it was made (original effort, not spun),
+and **Why** it exists (to help users vs. to game search). If a tactic fails the
+Who/How/Why test, drop it.
+
+## Relationship between the two Google AI surfaces
+
+Google runs **two distinct citation engines**, and they cite different URLs:
+
+| Surface | Selection behaviour | Optimize for |
+|---------|--------------------|--------------|
+| **AI Overviews** | Strongly ranking-correlated — cites pages that already rank well | Classic SEO + passage optimization |
+| **AI Mode** | Weakly ranking-correlated; broader pool (~9 domains cited/query) | Freshness, entity authority, citable passages beyond position 5 |
+
+AI Mode and AI Overviews reach the same *conclusion* most of the time but cite
+the same *URLs* a small minority of the time (Ahrefs, large query-pair study).
+Treat them as separate surfaces and score both: ranking well in classic Search
+feeds AI Overviews, but AI Mode draws from a broader pool where freshness and
+entity authority outweigh raw position.
+
+## Key Statistics (directional, verify before quoting to a client)
 
 | Metric | Value | Source |
 |--------|-------|--------|
-| AI Overviews reach | 1.5 billion users/month across 200+ countries | Google |
-| AI Overviews query coverage | 50%+ of all queries | Industry data |
-| AI-referred sessions growth | 527% (Jan-May 2025) | SparkToro |
-| ChatGPT weekly active users | 900 million | OpenAI |
-| Perplexity monthly queries | 500+ million | Perplexity |
+| AI Overviews reach | ~1.5B users/month, 200+ countries | Google |
+| AI Overviews query coverage | 50%+ of queries | Industry data |
+| AI Mode monthly users | 1B+ | Google |
+| AI-referred sessions growth | 527% (Jan–May 2025) | SparkToro |
+| ChatGPT weekly active users | ~900M | OpenAI |
 
-## Critical Insight: Brand Mentions > Backlinks
-
-**Brand mentions correlate 3× more strongly with AI visibility than backlinks.**
-(Ahrefs December 2025 study of 75,000 brands)
-
-| Signal | Correlation with AI Citations |
-|--------|------------------------------|
-| YouTube mentions | ~0.737 (strongest) |
-| Reddit mentions | High |
-| Wikipedia presence | High |
-| LinkedIn presence | Moderate |
-| Domain Rating (backlinks) | ~0.266 (weak) |
-
-**Only 11% of domains** are cited by both ChatGPT and Google AI Overviews for the same query — platform-specific optimization is essential.
+**Brand mentions correlate ~3x more strongly with AI visibility than backlinks**
+(Ahrefs, Dec 2025, 75k brands). Of the mention signals, YouTube mentions show
+the strongest correlation (~0.737); Domain Rating from backlinks is weak
+(~0.266). Only ~11% of domains are cited by *both* ChatGPT and Google AIO for the
+same query — platform-specific optimization is real.
 
 ---
 
-## GEO Analysis Criteria (Updated)
+## GEO Scoring Rubric (0–100)
 
-### 1. Citability Score (25%)
+Score each dimension 0–100, then weight. Every dimension has a **falsifiability
+check**: how you would know it failed, plus the leading indicator to watch.
 
-**Optimal passage length: 134-167 words** for AI citation.
+| # | Dimension | Weight |
+|---|-----------|--------|
+| 1 | Citability | 25% |
+| 2 | Structural readability | 20% |
+| 3 | Authority & freshness | 20% |
+| 4 | Technical accessibility (AI crawlers + render) | 20% |
+| 5 | Multi-modal content | 15% |
 
-**Strong signals:**
-- Clear, quotable sentences with specific facts/statistics
-- Self-contained answer blocks (can be extracted without context)
-- Direct answer in first 40-60 words of section
-- Claims attributed with specific sources
-- Definitions following "X is..." or "X refers to..." patterns
-- Unique data points not found elsewhere
+`final = round(0.25·cite + 0.20·struct + 0.20·auth + 0.20·tech + 0.15·multi)`
 
-**Weak signals:**
-- Vague, general statements
-- Opinion without evidence
-- Buried conclusions
-- No specific data points
+Bands: **80–100** AI-ready · **60–79** competitive, gaps remain · **40–59**
+significant work · **<40** largely invisible to AI surfaces.
 
-### 2. Structural Readability (20%)
+### 1. Citability (25%)
 
-**92% of AI Overview citations come from top-10 ranking pages**, but 47% come from pages ranking below position 5 — demonstrating different selection logic.
+Run passage scoring against **boilerplate-stripped main text** (strip nav,
+header, footer, sidebars — use your own extractor/crawler), not raw HTML, so
+chrome doesn't dilute the signal.
 
-**Strong signals:**
-- Clean H1→H2→H3 heading hierarchy
-- Question-based headings (matches query patterns)
-- Short paragraphs (2-4 sentences)
-- Tables for comparative data
-- Ordered/unordered lists for step-by-step or multi-item content
-- FAQ sections with clear Q&A format
+- Optimal self-contained answer block: **~134–167 words.**
+- Front-load it: a large share of AI citations come from the first ~30% of a
+  page (SE Ranking) — put the most citable answer near the top, not below the fold.
+- Direct answer in the **first 40–60 words** of each section.
+- "X is…" / "X refers to…" definition patterns score high.
+- Specific facts/statistics with source attribution; unique data points.
+- Penalize: vague generalities, buried conclusions, opinion without evidence.
 
-**Weak signals:**
-- Wall of text with no structure
-- Inconsistent heading hierarchy
-- No lists or tables
-- Information buried in paragraphs
+**Falsifiability:** *Failed if* an AI surface, asked the page's target question,
+answers without citing the page despite the page ranking on p1. *Leading
+indicator:* of the top question-headings, what % have a clean, extractable
+40–60-word answer block immediately under them? Below ~50% predicts low citation.
 
-### 3. Multi-Modal Content (15%)
+### 2. Structural readability (20%)
 
-Content with multi-modal elements sees **156% higher selection rates**.
+- Clean H1→H2→H3 hierarchy; no skipped levels.
+- **Question-based headings** that mirror real query phrasing (see citability
+  scoring below).
+- Short paragraphs (2–4 sentences); lists for steps/multi-item; tables for
+  comparative data; FAQ Q&A blocks.
+- Penalize: wall-of-text, inconsistent hierarchy, no lists/tables.
 
-**Check for:**
-- Text + relevant images
-- Video content (embedded or linked)
-- Infographics and charts
-- Interactive elements (calculators, tools)
-- Structured data supporting media
+**Falsifiability:** *Failed if* a heading outline extracted from the DOM reads
+as topical labels ("Overview", "Features") rather than questions a user types.
+*Leading indicator:* ratio of question-form headings to total headings.
 
-### 4. Authority & Brand Signals (20%)
+### 3. Authority & freshness (20%)
 
-**Strong signals:**
-- Author byline with credentials
-- Publication date and last-updated date
-- Citations to primary sources (studies, official docs, data)
-- Organization credentials and affiliations
-- Expert quotes with attribution
-- Entity presence in Wikipedia, Wikidata
-- Mentions on Reddit, YouTube, LinkedIn
+- Author byline with real credentials; Organization + Person entity signals.
+- Citations to primary sources (studies, official docs, data).
+- Entity presence: Wikipedia/Wikidata, Reddit, YouTube, LinkedIn (`sameAs`).
+- **Freshness is high-leverage.** Recent content (under ~3 months) is markedly
+  more likely to be cited; pages left stale 6+ months lose citation eligibility
+  (SE Ranking, 1.3M-citation study). A scheduled refresh program — with a real
+  `dateModified` change, not a touched timestamp — is one of the best GEO plays.
+- Penalize: anonymous authorship, missing dates, no sources.
 
-**Weak signals:**
-- Anonymous authorship
-- No dates
-- No sources cited
-- No brand presence across platforms
+**Falsifiability:** *Failed if* the most valuable pages have `dateModified`
+older than 6 months with no substantive update. *Leading indicator:* median age
+of top-traffic pages.
 
-### 5. Technical Accessibility (20%)
+### 4. Technical accessibility (20%)
 
-**AI crawlers do NOT execute JavaScript** — server-side rendering is critical.
+**AI crawlers generally do NOT execute JavaScript** — content that only appears
+after client hydration is invisible to most of them. Server render it.
 
-**Check for:**
-- Server-side rendering (SSR) vs client-only content
-- AI crawler access in robots.txt
-- llms.txt file presence and configuration
-- RSL 1.0 licensing terms
+- SSR/RSC vs client-only: is the answer in the initial HTML?
+- AI crawler access in `robots.txt` (see table below).
+- "Agent-friendly" basics: stable URLs, real `<a href>` links (not JS-only
+  click handlers), text content in HTML rather than canvas/image-only.
+- `llms.txt` presence (reported, **zero citation weight** — see caveat).
+
+**Falsifiability:** *Failed if* `curl`-ing the URL (no JS) returns a shell
+without the primary answer text. *Leading indicator:* ratio of
+extractable-text bytes in raw HTML vs. post-hydration DOM.
+
+### 5. Multi-modal content (15%)
+
+Pages with relevant images/video/charts/interactive elements show materially
+higher AI selection rates. Check for text + relevant media, supporting
+structured data, and that media has real alt/captions (text the crawler reads).
+
+**Falsifiability:** *Failed if* a how-to/comparison page is text-only where the
+query clearly wants a visual. *Leading indicator:* presence of at least one
+captioned, relevant media element per major section.
 
 ---
 
-## AI Crawler Detection
+## Question-based citability scoring (per heading)
 
-Check `robots.txt` for these AI crawlers:
+AI answers are question-shaped. Score each section heading and its lead passage:
+
+1. **Is the heading a question** (or trivially rephrasable as one matching a real
+   query)? Headings like "How do I…", "What is…", "X vs Y" are prime.
+2. **Does the first sentence answer it directly** in 40–60 words, self-contained?
+3. **Is there a quotable fact/number with attribution** in the block?
+4. **Is the block extractable** without surrounding context?
+
+Score each 0/1, average over headings → section citability sub-score. This is the
+fastest lever: rewriting H2/H3s as questions and adding a direct lead answer
+raises citability without new content.
+
+---
+
+## AI Crawler Access (robots.txt)
 
 | Crawler | Owner | Purpose |
 |---------|-------|---------|
-| GPTBot | OpenAI | ChatGPT web search |
+| GPTBot | OpenAI | ChatGPT web/search |
 | OAI-SearchBot | OpenAI | OpenAI search features |
-| ChatGPT-User | OpenAI | ChatGPT browsing |
+| ChatGPT-User | OpenAI | ChatGPT browsing on user request |
 | ClaudeBot | Anthropic | Claude web features |
 | PerplexityBot | Perplexity | Perplexity AI search |
+| Google-Extended | Google | Gemini/Vertex training opt-out token |
 | CCBot | Common Crawl | Training data (often blocked) |
-| anthropic-ai | Anthropic | Claude training |
 | Bytespider | ByteDance | TikTok/Douyin AI |
-| cohere-ai | Cohere | Cohere models |
 
-**Recommendation:** Allow GPTBot, OAI-SearchBot, ClaudeBot, PerplexityBot for AI search visibility. Block CCBot and training crawlers if desired.
+**Recommendation:** allow GPTBot, OAI-SearchBot, ChatGPT-User, ClaudeBot,
+PerplexityBot for AI-search visibility. Note that `Google-Extended` is a
+training opt-out token — blocking it does *not* remove you from AI Overviews/AI
+Mode (those follow normal Googlebot crawling). Block CCBot / training-only
+crawlers only if licensing policy requires it.
+
+### Next.js robots config (App Router)
+
+```ts
+// app/robots.ts
+import type { MetadataRoute } from 'next'
+
+const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://example.com'
+const AI_SEARCH_BOTS = ['GPTBot', 'OAI-SearchBot', 'ChatGPT-User', 'ClaudeBot', 'PerplexityBot']
+
+export default function robots(): MetadataRoute.Robots {
+  return {
+    rules: [
+      { userAgent: '*', allow: '/' },
+      // Explicitly allow AI search crawlers (overrides any future global tightening)
+      ...AI_SEARCH_BOTS.map((userAgent) => ({ userAgent, allow: '/' })),
+      // Block training-only crawler if licensing requires it:
+      { userAgent: 'CCBot', disallow: '/' },
+    ],
+    sitemap: `${SITE}/sitemap.xml`,
+  }
+}
+```
 
 ---
 
-## llms.txt Standard
+## Server-side rendering: the make-or-break check
 
-The emerging **llms.txt** standard provides AI crawlers with structured content guidance.
+Because AI crawlers don't run JS, the citable answer must be in the **initial
+HTML payload**. On our stack this means rendering it in a Server Component
+(default), not gating it behind a `'use client'` boundary that fetches on mount.
 
-**Location:** `/llms.txt` (root of domain)
+```tsx
+// app/[locale]/guides/[slug]/page.tsx — RSC: answer is in the HTML, no JS needed
+import { getTranslations } from 'next-intl/server'
+import { getGuide } from '@/lib/payload'
 
-**Format:**
+export default async function GuidePage({ params }: { params: Promise<{ slug: string; locale: string }> }) {
+  const { slug } = await params
+  const guide = await getGuide(slug) // server fetch — rendered before send
+
+  return (
+    <article>
+      <h1>{guide.title}</h1>
+      {/* Lead answer block: 40–60 words, self-contained, first thing in the DOM */}
+      <p className="lead">{guide.summary}</p>
+      {guide.sections.map((s) => (
+        <section key={s.id}>
+          {/* Question-form heading mirrors the target query */}
+          <h2>{s.question}</h2>
+          <p>{s.directAnswer}</p>
+          {s.body}
+        </section>
+      ))}
+    </article>
+  )
+}
 ```
-# Title of site
-> Brief description
 
-## Main sections
-- [Page title](url): Description
-- [Another page](url): Description
-
-## Optional: Key facts
-- Fact 1
-- Fact 2
-```
-
-**Check for:**
-- Presence of `/llms.txt`
-- Structured content guidance
-- Key page highlights
-- Contact/authority information
+Verify with a JS-disabled fetch (use your own crawler/tooling, or
+`curl -A "GPTBot" <url>`): the answer text must be present in the raw HTML.
 
 ---
 
-## RSL 1.0 (Really Simple Licensing)
+## llms.txt — implement, but no false hope
 
-New standard (December 2025) for machine-readable AI licensing terms.
+The `/llms.txt` convention lets a site advertise its structured content to
+agents. **Primary-source caveat:** Google has stated it is *not* a citation or
+ranking signal for AI search, and server-log audits show major AI search systems
+rarely fetch it. Report its presence in an audit but assign it **zero
+citation-ranking weight**. It is cheap and harmless to ship (some agent tooling
+reads it), so treat it as hygiene, not a lever — never promise visibility gains
+from it.
 
-**Backed by:** Reddit, Yahoo, Medium, Quora, Cloudflare, Akamai, Creative Commons
+```
+# Example /llms.txt
+# Acme Docs
+> Developer documentation for the Acme platform.
 
-**Check for:** RSL implementation and appropriate licensing terms.
+## Core
+- [Quickstart](https://example.com/docs/quickstart): 5-minute setup
+- [API reference](https://example.com/docs/api): Full endpoint reference
+
+## Key facts
+- Founded 2019, EU-hosted, GDPR-compliant
+```
+
+You can serve it statically (`public/llms.txt`) or generate it from the CMS:
+
+```ts
+// app/llms.txt/route.ts — generated from Payload content
+import { getDocsIndex } from '@/lib/payload'
+
+const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://example.com'
+
+export const revalidate = 3600
+
+export async function GET() {
+  const pages = await getDocsIndex()
+  const body = [
+    '# Acme Docs',
+    '> Developer documentation for the Acme platform.',
+    '',
+    '## Core',
+    ...pages.map((p) => `- [${p.title}](${SITE}${p.path}): ${p.summary}`),
+  ].join('\n')
+  return new Response(body, { headers: { 'Content-Type': 'text/plain; charset=utf-8' } })
+}
+```
+
+---
+
+## Structured data for AI discoverability (RSC, JSON-LD)
+
+Emit entity signals server-side. Keep `dateModified` honest — bump it only on a
+real content change so the freshness signal stays trustworthy.
+
+```tsx
+// Inside the RSC page — Article + Person + Organization signals
+function JsonLd({ guide, site }: { guide: Guide; site: string }) {
+  const data = {
+    '@context': 'https://schema.org',
+    '@type': 'Article',
+    headline: guide.title,
+    datePublished: guide.publishedAt,
+    dateModified: guide.updatedAt, // real modification date only
+    author: {
+      '@type': 'Person',
+      name: guide.author.name,
+      jobTitle: guide.author.role,
+      sameAs: guide.author.profiles, // LinkedIn, Wikipedia, etc.
+    },
+    publisher: {
+      '@type': 'Organization',
+      name: 'Acme',
+      sameAs: [`${site}`, 'https://www.linkedin.com/company/acme'],
+    },
+  }
+  return <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(data) }} />
+}
+```
+
+For FAQ/HowTo markup and full schema patterns, defer to the **seo-schema**
+skill rather than re-deriving it here.
 
 ---
 
 ## Platform-Specific Optimization
 
-| Platform | Key Citation Sources | Optimization Focus |
-|----------|---------------------|-------------------|
-| **Google AI Overviews** | Top-10 ranking pages (92%) | Traditional SEO + passage optimization |
-| **ChatGPT** | Wikipedia (47.9%), Reddit (11.3%) | Entity presence, authoritative sources |
-| **Perplexity** | Reddit (46.7%), Wikipedia | Community validation, discussions |
+| Platform | Key citation sources | Focus |
+|----------|---------------------|-------|
+| **Google AI Overviews** | Pages that already rank well | Classic SEO + passage optimization |
+| **Google AI Mode** | Broader pool, weak rank correlation | Freshness, entity authority, citable passages beyond p5 |
+| **ChatGPT** | Wikipedia (~48%), Reddit (~11%) | Entity presence, authoritative sources |
+| **Perplexity** | Reddit (~47%), Wikipedia | Community validation, recency, structure |
 | **Bing Copilot** | Bing index, authoritative sites | Bing SEO, IndexNow |
 
 ---
 
-## Output
+## Audit Output
 
-Generate `GEO-ANALYSIS.md` with:
+Produce `GEO-ANALYSIS.md`:
 
-1. **GEO Readiness Score: XX/100**
-2. **Platform breakdown** (Google AIO, ChatGPT, Perplexity scores)
-3. **AI Crawler Access Status** (which crawlers allowed/blocked)
-4. **llms.txt Status** (present, missing, recommendations)
-5. **Brand Mention Analysis** (presence on Wikipedia, Reddit, YouTube, LinkedIn)
-6. **Passage-Level Citability** (optimal 134-167 word blocks identified)
-7. **Server-Side Rendering Check** (JavaScript dependency analysis)
-8. **Top 5 Highest-Impact Changes**
-9. **Schema Recommendations** (for AI discoverability)
-10. **Content Reformatting Suggestions** (specific passages to rewrite)
+1. **GEO Readiness Score: XX/100** + per-dimension breakdown
+2. **Per-surface scores** (AI Overviews, AI Mode, ChatGPT, Perplexity, Copilot)
+3. **AI crawler access status** — exactly which bots allowed/blocked + the
+   `robots.txt` directives to fix it
+4. **SSR/render check** — does the raw HTML contain the answer text? (per key page)
+5. **Passage citability** — question-heading score, identified weak blocks, and
+   specific 134–167-word rewrites
+6. **Authority & freshness** — author/entity signals, median page age
+7. **llms.txt status** — present/absent (zero ranking weight; template if absent)
+8. **Top 5 highest-impact changes** with effort estimates
+9. **Falsifiability notes** — for each top change, how we'd know it worked
+   (leading indicator) and how we'd know it failed
+
+When a community recommendation contradicts Google's primary-source guidance,
+defer to Google and flag the contradiction.
+
+### Error handling
+
+| Scenario | Action |
+|----------|--------|
+| URL unreachable | Report clearly; don't guess content; ask user to verify URL |
+| AI crawlers blocked | List exactly which are blocked; provide `robots.txt` fix |
+| No `llms.txt` | Note absence (zero weight); provide template; don't oversell it |
+| Answer absent from raw HTML | Flag client-only rendering; recommend RSC/SSR move |
+| No structured data | Recommend Article/Organization/Person (defer to seo-schema) |
 
 ---
 
-## Quick Wins
+## Priority Playbook
 
-1. Add "What is [topic]?" definition in first 60 words
-2. Create 134-167 word self-contained answer blocks
-3. Add question-based H2/H3 headings
-4. Include specific statistics with sources
-5. Add publication/update dates
-6. Implement Person schema for authors
-7. Allow key AI crawlers in robots.txt
+**Quick wins** — rewrite H2/H3s as questions; add a 40–60-word direct answer
+under each; front-load the most citable block; add specific stats with sources;
+publish/updated dates; allow key AI crawlers in `robots.txt`; Person schema for
+authors.
 
-## Medium Effort
+**Medium** — move client-only answer content into RSC/SSR; author bios with
+credentials + `sameAs`; comparison tables; ship `/llms.txt` (hygiene only);
+set up a content-freshness refresh cadence.
 
-1. Create `/llms.txt` file
-2. Add author bio with credentials + Wikipedia/LinkedIn links
-3. Ensure server-side rendering for key content
-4. Build entity presence on Reddit, YouTube
-5. Add comparison tables with data
-6. Implement FAQ sections (structured, not schema for commercial sites)
+**High impact** — original research/surveys (unique citability); entity
+presence (Wikipedia/Wikidata, YouTube, Reddit); comprehensive `sameAs` entity
+linking; build/own a useful tool or calculator that earns mentions.
 
-## High Impact
-
-1. Create original research/surveys (unique citability)
-2. Build Wikipedia presence for brand/key people
-3. Establish YouTube channel with content mentions
-4. Implement comprehensive entity linking (sameAs across platforms)
-5. Develop unique tools or calculators
+> Parts adapted from [claude-seo](https://github.com/AgriciDaniel/claude-seo) (MIT, © 2026 agricidaniel).
