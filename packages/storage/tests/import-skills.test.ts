@@ -69,4 +69,44 @@ describe('importSkills()', () => {
       db.close()
     }
   })
+
+  it('--full prune deprecates skills removed from the bundle but protects System/Lifecycle', () => {
+    const workspace = makeWorkspace()
+    const writeSkill = (name: string, desc: string) => {
+      const dir = path.join(workspace, '.claude', 'skill', name)
+      fs.mkdirSync(dir, { recursive: true })
+      fs.writeFileSync(path.join(dir, 'SKILL.md'), `---\nname: ${name}\ndescription: ${desc}\n---\n# ${name}\n`)
+    }
+    writeSkill('foo', 'Foo skill')
+    writeSkill('bar', 'Bar skill')
+    importSkills(workspace)
+
+    // Seed protected infra directly in the DB (not backed by files).
+    const dbPath = path.join(workspace, '.codegraph', 'graph.db')
+    const seed = new Database(dbPath)
+    const now = new Date().toISOString()
+    const ins = seed.prepare(
+      `INSERT INTO skills (name, category, description, content, type, tags, lines, updated_at, status)
+       VALUES (?, ?, ?, ?, ?, '[]', 1, ?, 'active')`,
+    )
+    ins.run('_routing-index', 'System', 'idx', '# idx', 'domain', now)
+    ins.run('using-superpowers', 'Lifecycle', 'lc', '# lc', 'lifecycle', now)
+    seed.close()
+
+    // Remove bar from the bundle, then full-sync.
+    fs.rmSync(path.join(workspace, '.claude', 'skill', 'bar'), { recursive: true, force: true })
+    const result = importSkills(workspace, { prune: true })
+    expect(result.pruned).toBe(1)
+
+    const db = new Database(dbPath)
+    try {
+      const status = (n: string) => (db.prepare('SELECT status AS s FROM skills WHERE name = ?').get(n) as { s: string } | undefined)?.s
+      expect(status('foo')).toBe('active')               // still in bundle
+      expect(status('bar')).toBe('deprecated')           // removed → pruned
+      expect(status('_routing-index')).toBe('active')    // System protected
+      expect(status('using-superpowers')).toBe('active') // Lifecycle protected
+    } finally {
+      db.close()
+    }
+  })
 })

@@ -36,6 +36,11 @@ export function openDb(repoPath: string): Database.Database {
   db.pragma('journal_mode = WAL')
   db.pragma('foreign_keys = ON')
   db.pragma('synchronous = NORMAL')
+  // Every MCP tool opens its own short-lived connection; the 24h decay job
+  // UPDATEs all active skills and can collide with concurrent recordUsage()
+  // writers. Without a busy_timeout that surfaces as SQLITE_BUSY with no retry —
+  // wait up to 5s for the lock instead.
+  db.pragma('busy_timeout = 5000')
 
   runMigrations(db)
 

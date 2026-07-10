@@ -215,7 +215,25 @@ function walkDir(dir: string, callback: (file: string, name: string) => void): v
   }
 }
 
-export function importSkills(workspacePath: string): { skills: number; agents: number; commands: number } {
+export interface ImportSkillsOptions {
+  /**
+   * Full-sync mode. After upserting the filesystem catalog, soft-deprecate any
+   * ACTIVE skill that is no longer present in the discovered set — treating the
+   * filesystem bundle as the complete source of truth. Off by default because
+   * the additive path is safe for incremental/boot imports; enable only when you
+   * want the DB to exactly mirror the files (e.g. an intentional catalog sync).
+   *
+   * Protections: never touches System/Lifecycle categories, and only flips
+   * `active` rows (leaves `pending` drafts and already-`deprecated` rows alone).
+   * Reversible: sets status='deprecated', it does not delete.
+   */
+  prune?: boolean
+}
+
+export function importSkills(
+  workspacePath: string,
+  opts: ImportSkillsOptions = {},
+): { skills: number; agents: number; commands: number; pruned: number } {
   const db = openDb(workspacePath)
   const store = new SkillsStore(db)
 
@@ -348,10 +366,27 @@ export function importSkills(workspacePath: string): { skills: number; agents: n
   // Batch insert
   store.upsertBatch(skills)
 
+  // Optional full-sync: deprecate active skills that vanished from the bundle.
+  let pruned = 0
+  if (opts.prune) {
+    const discovered = new Set(skills.map((s) => s.name))
+    const activeNames = (db
+      .prepare(`SELECT name FROM skills WHERE status = 'active' AND category NOT IN ('System','Lifecycle')`)
+      .all() as { name: string }[]).map((r) => r.name)
+    const toPrune = activeNames.filter((n) => !discovered.has(n))
+    if (toPrune.length > 0) {
+      const nowIso = new Date().toISOString()
+      const upd = db.prepare(`UPDATE skills SET status = 'deprecated', updated_at = ? WHERE name = ?`)
+      const tx = db.transaction((names: string[]) => { for (const n of names) upd.run(nowIso, n) })
+      tx(toPrune)
+      pruned = toPrune.length
+    }
+  }
+
   closeDb(db)
 
   const domainCount = skills.filter((s) => s.type === 'domain').length
-  return { skills: domainCount, agents: agentCount, commands: commandCount }
+  return { skills: domainCount, agents: agentCount, commands: commandCount, pruned }
 }
 
 function isLifecycleSkill(name: string): boolean {
@@ -411,11 +446,14 @@ function extractTags(name: string, content: string): string[] {
 
 // CLI entry point
 if (process.argv[1]?.endsWith('import-skills.js')) {
-  const workspace = process.argv[2] || process.cwd()
-  console.log(`Importing skills from: ${workspace}`)
-  const result = importSkills(workspace)
+  const args = process.argv.slice(2)
+  const prune = args.includes('--full') || args.includes('--prune')
+  const workspace = args.find((a) => !a.startsWith('--')) || process.cwd()
+  console.log(`Importing skills from: ${workspace}${prune ? ' (full-sync: prune enabled)' : ''}`)
+  const result = importSkills(workspace, { prune })
   console.log(`✅ Import complete:`)
   console.log(`   Skills: ${result.skills}`)
   console.log(`   Agents: ${result.agents}`)
   console.log(`   Commands: ${result.commands}`)
+  if (prune) console.log(`   Pruned (deprecated): ${result.pruned}`)
 }

@@ -103,7 +103,10 @@ export function createSkillsRouter(ctx: RouteContext): Router {
 
   // Health dashboard — MUST be declared before `/api/skills/:name`,
   // otherwise Express matches "health" as the :name param and routes to detail.
-  router.get('/api/skills/health', (_req, res) => {
+  // Admin-gated (like the sibling write routes): the report exposes internal
+  // analytics — dead skills, confidence trends, cooccurrence — that shouldn't be
+  // world-readable. If a non-admin dashboard view needs it, swap for a lighter guard.
+  router.get('/api/skills/health', ctx.requireAdmin, (_req, res) => {
     try {
       const db = openDb(ctx.skillbrainRoot)
       const store = new SkillsStore(db)
@@ -172,9 +175,20 @@ export function createSkillsRouter(ctx: RouteContext): Router {
     }
   })
 
-  // Telemetry: client-side Skill tool usage
+  // Telemetry: client-side Skill tool usage.
+  // localhost-only, and — because recording an 'applied' event calls
+  // reinforceSkill (confidence +1) which feeds ~22% of route() ranking weight —
+  // optionally token-gated so a co-tenant local process can't poison ranking.
+  // Enforced only when SKILLBRAIN_TELEMETRY_TOKEN is set (backward compatible).
   router.post('/telemetry/skill-usage', json({ limit: '8kb' }), (req, res) => {
     if (!ctx.isLocalhost(req)) { res.status(403).json({ error: 'localhost only' }); return }
+    const requiredToken = process.env.SKILLBRAIN_TELEMETRY_TOKEN
+    if (requiredToken) {
+      const auth = typeof req.headers.authorization === 'string' ? req.headers.authorization : ''
+      const provided = (typeof req.headers['x-telemetry-token'] === 'string' ? req.headers['x-telemetry-token'] : '')
+        || auth.replace(/^Bearer\s+/i, '')
+      if (provided !== requiredToken) { res.status(401).json({ error: 'invalid telemetry token' }); return }
+    }
     const { skill, action, sessionId, project, task, tool } = (req.body || {}) as {
       skill?: string; action?: string; sessionId?: string
       project?: string; task?: string; tool?: string
