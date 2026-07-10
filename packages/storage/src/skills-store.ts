@@ -89,6 +89,16 @@ export interface SkillUsageRow {
 // covers the realistic case (single store opened per request).
 const DEDUP_WINDOW_MS = 1000
 
+// Skills excluded from task-driven routing (route()). They are reached through
+// other channels — session entrypoints (lifecycle), the Agent tool (agent:*),
+// slash commands (command:*) — or are meta-documents whose broad keyword
+// coverage crowds out the specific domain/process skill a task needs
+// (_routing-index catalogues ~150 skills, so it lexically matches almost any
+// query). All remain fully readable via skill_read / agent_read / command_read;
+// this only keeps them out of the ranked task recommendations.
+const ROUTING_EXCLUDED_TYPES: ReadonlySet<SkillType> = new Set(['agent', 'command', 'lifecycle'])
+const ROUTING_EXCLUDED_NAMES: ReadonlySet<string> = new Set(['_routing-index'])
+
 export class SkillsStore {
   private static _telemetryWarned = false
   private static _telemetryFailures = 0
@@ -195,7 +205,7 @@ export class SkillsStore {
         SELECT s.name as skillName, COUNT(u.id) as count
         FROM skills s
         LEFT JOIN skill_usage u ON u.skill_name = s.name AND u.ts >= datetime('now', ?)
-        WHERE s.status = 'active'
+        WHERE s.status = 'active' AND s.category NOT IN ('System','Lifecycle')
         GROUP BY s.name
         HAVING SUM(CASE WHEN u.action = 'loaded' THEN 1 ELSE 0 END) = 0
            AND SUM(CASE WHEN u.action = 'applied' THEN 1 ELSE 0 END) = 0
@@ -228,16 +238,9 @@ export class SkillsStore {
           sessions_since_validation = COALESCE(sessions_since_validation, 0) + 1
         WHERE status = 'active'
       `),
-      applySkillDecay: this.db.prepare(`
-        UPDATE skills SET
-          confidence = MAX(COALESCE(confidence, 5) - 1, 1),
-          updated_at = ?
-        WHERE sessions_since_validation >= 10 AND COALESCE(confidence, 5) > 1 AND status = 'active'
-      `),
-      deprecateSkills: this.db.prepare(`
-        UPDATE skills SET status = 'deprecated', updated_at = ?
-        WHERE sessions_since_validation >= 30 AND COALESCE(confidence, 5) < 3 AND status = 'active'
-      `),
+      // Confidence decay + deprecation are issued as inline SQL in applyDecay()
+      // (with PROTECTED_CATS and the thresholds from constants.ts, 5 / 20). The
+      // old prepared statements here hard-coded 10 / 30 and were never referenced.
       // Recent load count for a skill in the last N hours (for usage boost in route())
       recentLoadCount: this.db.prepare(`
         SELECT COUNT(*) as count FROM skill_usage
@@ -375,7 +378,18 @@ export class SkillsStore {
 
   get(name: string): Skill | undefined {
     const row = this.stmts.get.get(name) as any
-    return row ? this.rowToSkill(row) : undefined
+    if (row) return this.rowToSkill(row)
+    // Fallback: route() returns prefixed names (agent:builder, command:frontend),
+    // but callers frequently pass the bare name. Exact match always wins first
+    // (a domain skill named X beats agent:X); only when there is no exact hit do
+    // we try the agent:/command: forms so skill_read('builder') doesn't 404.
+    if (!name.includes(':')) {
+      for (const prefix of ['agent:', 'command:']) {
+        const alt = this.stmts.get.get(prefix + name) as any
+        if (alt) return this.rowToSkill(alt)
+      }
+    }
+    return undefined
   }
 
   list(type?: SkillType, category?: string): Skill[] {
@@ -409,7 +423,12 @@ export class SkillsStore {
   }
 
   route(taskDescription: string, limit = 5, activeSkills: string[] = [], project?: string): Skill[] {
-    const results = this.search(taskDescription, limit * 3)
+    // Over-fetch, then drop skills that shouldn't compete for task routing
+    // (agent/command/lifecycle types + _routing-index). Over-fetching keeps
+    // recall so the exclusion doesn't starve the final top-`limit`.
+    const results = this.search(taskDescription, limit * 5).filter(
+      (r) => !ROUTING_EXCLUDED_TYPES.has(r.skill.type) && !ROUTING_EXCLUDED_NAMES.has(r.skill.name),
+    )
     if (results.length === 0) return []
 
     const maxBm25 = Math.abs(Math.min(...results.map((r) => r.rank)))
@@ -429,7 +448,11 @@ export class SkillsStore {
           return Math.log1p(loaded + applied * 3)
         } catch { return 0 }
       })()
-      const recencyBoost = recentCount / (Math.log1p(100))
+      // Normalize to [0,1] like the other boosts so recency can contribute at
+      // most its 0.12 weight and never exceeds the 0.38 BM25 budget — otherwise a
+      // heavily-loaded skill (loaded+applied*3 > 100) out-ranks a perfect lexical
+      // match on an unrelated query.
+      const recencyBoost = Math.min(recentCount / Math.log1p(100), 1)
       const coocCount = this.getCooccurrenceCount(r.skill.name, activeSkills)
       const coocBoost = Math.min(coocCount / 100, 1.0)
 

@@ -88,14 +88,16 @@ program
   .command('import-skills')
   .description('Import skills, agents, and commands from filesystem into SQLite')
   .argument('[path]', 'Path to workspace root', '.')
-  .action(async (targetPath: string) => {
+  .option('--full', 'Full-sync: also deprecate active skills no longer present in the bundle (protects System/Lifecycle)')
+  .action(async (targetPath: string, opts: { full?: boolean }) => {
     try {
       const { importSkills } = await import('@skillbrain/storage')
-      const result = importSkills(targetPath)
+      const result = importSkills(targetPath, { prune: !!opts.full })
       console.log(`✅ Import complete:`)
       console.log(`   Skills: ${result.skills}`)
       console.log(`   Agents: ${result.agents}`)
       console.log(`   Commands: ${result.commands}`)
+      if (opts.full) console.log(`   Pruned (deprecated): ${result.pruned}`)
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
       console.error(`[codegraph] Import failed: ${msg}`)

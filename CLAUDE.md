@@ -111,6 +111,37 @@ To use: read `.claude/command/{name}.md` and follow its protocol.
 
 ---
 
+## Codex Integration (second-opinion runtime)
+
+Codex CLI runs in parallel to Claude via the official `codex@openai-codex` plugin. Use for second opinions, deeper investigations, or to offload long tasks while Claude continues other work.
+
+### Slash commands
+| Command | Use when |
+|---------|----------|
+| `/codex:review` | Second-opinion code review of working tree or branch diff |
+| `/codex:adversarial-review` | Aggressive review — challenges design choices, not just bugs |
+| `/codex:rescue <task>` | Hand a substantial debugging/implementation task to Codex |
+| `/codex:status` | List running Codex tasks |
+| `/codex:result` | Fetch result of a finished Codex task |
+| `/codex:cancel` | Cancel a running Codex task |
+| `/codex:setup` | Verify/configure Codex runtime |
+
+Flags: `--wait` (foreground) / `--background` (detach), `--write` (default for rescue, off for reviews), `--resume` (continue last Codex thread in this repo), `--fresh` (start new thread).
+
+### Custom subagents (user-level, available in all projects)
+Invoke via the `Agent` tool with `subagent_type`:
+
+| Subagent | When to dispatch |
+|----------|------------------|
+| `codex-rescue` | Generic rescue — Claude is stuck or needs second implementation pass |
+| `codex-security-auditor` | Before merging auth/secrets/input changes — OWASP Top 10 read-only audit |
+| `codex-perf-analyst` | Before shipping a page that targets Lighthouse > 90 — RSC/bundle/data-fetching audit |
+| `codex-coolify-validator` | Before deploying — catches hardcoded paths, missing env vars, Docker footguns |
+
+All custom subagents run **read-only** by default and default to `--background`. They forward a pre-framed prompt to `codex-companion.mjs task`; do not call Codex directly from the main thread when one of these specialized agents fits.
+
+---
+
 ## Auto-hooks (project-scoped)
 
 The following are wired in `.claude/settings.json` and run automatically — do **not** invoke them manually unless the task changes mid-session.
@@ -118,11 +149,11 @@ The following are wired in `.claude/settings.json` and run automatically — do 
 | Event | Script | Purpose |
 |-------|--------|---------|
 | `SessionStart` | `.claude/scripts/load_project_context.sh` | Prints 5-layer Cortex briefing into the session as system context |
-| `PostToolUse` matcher `Skill` | `.claude/scripts/skill-apply-hook.sh` | Inserts an `applied` row into `.codegraph/graph.db skill_usage` so health/route ranking sees real apply signal |
+| `PostToolUse` matcher `Skill` | `.claude/scripts/skill-apply-hook.sh` | Inserts an `applied` row into the **local** `.codegraph/graph.db skill_usage` |
 
 Implications:
 - Skip manual `cortex_briefing` calls at the start of a session — the briefing is already in context.
-- The `Skill` tool (built-in Claude Code skills) is auto-instrumented. For MCP skills loaded via `skill_read`, telemetry is recorded server-side and is not affected by these hooks.
+- The `Skill` tool (built-in Claude Code skills) is auto-instrumented into the **local** DB. Because the MCP `codegraph` server proxies to prod (`memory.fl1.it`), these local `applied` rows do **not** reach prod's route/health ranking — only MCP `skill_read`/`skill_apply`/`skill_route` record telemetry server-side. See [`packages/codegraph/docs/DEPLOY-SKILLS.md`](packages/codegraph/docs/DEPLOY-SKILLS.md) for the full two-DB / telemetry picture and how to deploy skill changes to prod.
 - Both scripts walk upward from `cwd` to locate `.codegraph/graph.db`, so they work from any subdir of the workspace.
 
 ---
