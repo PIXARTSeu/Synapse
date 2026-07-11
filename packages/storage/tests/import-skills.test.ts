@@ -109,4 +109,29 @@ describe('importSkills()', () => {
       db.close()
     }
   })
+
+  it('--full does NOT prune when the bundle is empty (0 skills discovered)', () => {
+    const workspace = makeWorkspace() // no .claude/skill — nothing to discover
+    importSkills(workspace)           // creates the DB, imports 0 skills
+
+    // Seed an active catalog skill directly (simulates an existing prod catalog).
+    const dbPath = path.join(workspace, '.codegraph', 'graph.db')
+    const seed = new Database(dbPath)
+    seed.prepare(
+      `INSERT INTO skills (name, category, description, content, type, tags, lines, updated_at, status)
+       VALUES ('keepme', 'Backend', 'd', '#', 'domain', '[]', 1, ?, 'active')`,
+    ).run(new Date().toISOString())
+    seed.close()
+
+    // --full against an empty bundle must NOT deprecate the existing catalog.
+    const result = importSkills(workspace, { prune: true })
+    expect(result.pruned).toBe(0)
+
+    const db = new Database(dbPath)
+    try {
+      expect((db.prepare("SELECT status AS s FROM skills WHERE name = 'keepme'").get() as { s: string }).s).toBe('active')
+    } finally {
+      db.close()
+    }
+  })
 })

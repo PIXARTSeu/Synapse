@@ -39,13 +39,19 @@ run_import() {
   fi
 
   # Run import (additive — never prunes on boot; use `import-skills --full` manually for that)
-  node dist/cli.js import-skills "$DATA_DIR" 2>&1
+  BEFORE=$(sqlite3 "$DATA_DIR/.codegraph/graph.db" "SELECT COUNT(*) FROM skills;" 2>/dev/null || echo "?")
+  if node dist/cli.js import-skills "$DATA_DIR" 2>&1; then
+    AFTER=$(sqlite3 "$DATA_DIR/.codegraph/graph.db" "SELECT COUNT(*) FROM skills;" 2>/dev/null || echo "?")
+    echo "Skill catalog: ${BEFORE} -> ${AFTER} skills"
+    # Record the imported bundle hash ONLY on success, so a failed import retries
+    # on the next boot instead of being permanently masked by a stale hash.
+    [ -n "$BUNDLE_HASH" ] && printf '%s' "$BUNDLE_HASH" > "$HASH_FILE"
+  else
+    echo "WARNING: skill import FAILED (exit $?) — catalog.hash left unchanged so the next boot retries." >&2
+  fi
 
   # Cleanup symlinks (data stays in SQLite)
   rm -rf "$DATA_DIR/.opencode" "$DATA_DIR/.agents"
-
-  # Record the imported bundle hash so unchanged redeploys skip the import.
-  [ -n "$BUNDLE_HASH" ] && printf '%s' "$BUNDLE_HASH" > "$HASH_FILE"
 }
 
 if [ "$SKILL_COUNT" = "0" ] || [ "$SKILL_COUNT" = "" ]; then
