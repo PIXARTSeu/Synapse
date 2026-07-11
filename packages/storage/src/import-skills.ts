@@ -368,7 +368,13 @@ export function importSkills(
 
   // Optional full-sync: deprecate active skills that vanished from the bundle.
   let pruned = 0
-  if (opts.prune) {
+  if (opts.prune && skills.length === 0) {
+    // Safety guard: an empty discovered set almost always means the bundle path
+    // was wrong (e.g. `import-skills /data` without the .opencode/.agents symlinks
+    // that entrypoint.sh sets up), NOT an intent to deprecate the entire catalog.
+    // Refuse to prune — otherwise a misconfigured path silently wipes every skill.
+    console.warn('[import-skills] --full: 0 skills discovered — skipping prune to avoid deprecating the whole catalog. Check the workspace path.')
+  } else if (opts.prune) {
     const discovered = new Set(skills.map((s) => s.name))
     const activeNames = (db
       .prepare(`SELECT name FROM skills WHERE status = 'active' AND category NOT IN ('System','Lifecycle')`)
