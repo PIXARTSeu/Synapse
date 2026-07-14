@@ -47,6 +47,8 @@ export interface CreateMcpServerOptions {
    * Required for user-scoped tools (e.g. user_env_*).
    */
   userId?: string
+  /** Server-wide Anthropic API key fallback — see ToolContext.anthropicApiKey (tools/index.ts). */
+  anthropicApiKey?: string
 }
 
 export function createMcpServer(opts: CreateMcpServerOptions = {}): McpServer {
@@ -56,7 +58,7 @@ export function createMcpServer(opts: CreateMcpServerOptions = {}): McpServer {
   })
 
   // Register all domain tool modules
-  registerAllTools(server, { userId: opts.userId })
+  registerAllTools(server, { userId: opts.userId, anthropicApiKey: opts.anthropicApiKey })
 
   // --- Resources ---
   server.resource('codegraph://repos', 'codegraph://repos', async () => {

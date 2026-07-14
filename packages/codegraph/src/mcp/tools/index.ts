@@ -19,6 +19,13 @@ export interface ToolContext {
    * back to a default user.
    */
   userId?: string
+  /**
+   * Server-wide Anthropic API key fallback (process.env.ANTHROPIC_API_KEY),
+   * mirroring RouteContext.anthropicApiKey (routes/index.ts). Used by
+   * `skill_scan`'s optional LLM judge layer (Task 8) when no per-user key is
+   * found via UsersEnvStore. Undefined in stdio mode.
+   */
+  anthropicApiKey?: string
 }
 
 export type ToolRegistrar = (server: McpServer, ctx: ToolContext) => void

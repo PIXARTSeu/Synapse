@@ -9,6 +9,7 @@
  */
 
 import { z } from 'zod'
+import Anthropic from '@anthropic-ai/sdk'
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { openDb, closeDb } from '@skillbrain/storage'
 import { MemoryStore } from '@skillbrain/storage'
@@ -16,8 +17,10 @@ import { SkillsStore, ConcurrencyError } from '@skillbrain/storage'
 import type { Skill } from '@skillbrain/storage'
 import { getRegistryEntry, loadRegistry } from '@skillbrain/storage'
 import { applyGate } from '@skillbrain/storage'
+import { UsersEnvStore } from '@skillbrain/storage'
 import { dashboardUrl } from '../../constants.js'
 import type { ToolContext } from './index.js'
+import { resolveScanTarget, runSkillScan } from './skill-scan.js'
 
 const MEMORY_REPO_NAME = process.env.SKILLBRAIN_MEMORY_REPO || 'skillbrain'
 const SKILLBRAIN_ROOT = process.env.SKILLBRAIN_ROOT || ''
@@ -74,6 +77,46 @@ function formatTopFindings(riskFindings: string | undefined, limit = 3): string 
 }
 
 const skillTypes = ['domain', 'lifecycle', 'process', 'agent', 'command'] as const
+
+// Resolves an Anthropic API key for skill_scan's optional LLM judge layer
+// (Task 8). Precedence mirrors http-server.ts's resolveCredentials():
+// per-user key (UsersEnvStore) first, then the server-wide fallback
+// (ctx.anthropicApiKey, set from process.env.ANTHROPIC_API_KEY). Returns
+// null (never throws) when neither resolves — callers fall back to
+// static-only rather than erroring.
+function resolveAnthropicKey(ctx: ToolContext, repoPath: string): string | null {
+  if (ctx.userId) {
+    try {
+      const db = openDb(repoPath)
+      try {
+        const userKey = new UsersEnvStore(db).getEnv(ctx.userId, 'ANTHROPIC_API_KEY')
+        if (userKey) return userKey
+      } finally {
+        closeDb(db)
+      }
+    } catch {
+      // Encryption unavailable, no entry, or DB error — fall through to server key.
+    }
+  }
+  return ctx.anthropicApiKey || null
+}
+
+// LLM completion callback for skill_scan's optional judge layer — wraps the
+// Anthropic client the same way review.ts's generate-proposal route does
+// (review.ts:183-184): `new Anthropic({ apiKey })`, then a single
+// messages.create() call, returning the text block.
+function makeAnthropicComplete(apiKey: string): (prompt: string) => Promise<string> {
+  const client = new Anthropic({ apiKey })
+  return async (prompt: string) => {
+    const response = await client.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 1024,
+      messages: [{ role: 'user', content: prompt }],
+    })
+    const block = response.content[0]
+    return block && block.type === 'text' ? block.text : ''
+  }
+}
 
 export function registerSkillTools(server: McpServer, ctx: ToolContext): void {
   // --- Tool: skill_list ---
@@ -229,6 +272,45 @@ export function registerSkillTools(server: McpServer, ctx: ToolContext): void {
               : `✅ Skill "${name}" created and active.`,
         }],
       }
+    },
+  )
+
+  // --- Tool: skill_scan ---
+  // On-demand counterpart to the ingestion gate (applyGate, Task 7). That
+  // write-path gate is static-only by design (see skill-gate.ts's rationale —
+  // no per-request LLM latency/cost on every skill_add/skill_update). Here,
+  // on-demand, the optional LLM judge layer built in Task 5
+  // (@skillbrain/skill-guard's scanLlm) is actually exposed via `llm: true`.
+  server.tool(
+    'skill_scan',
+    'Run an on-demand security scan of a skill (by name or raw content) using the skill-guard static scanner. Set llm:true to also run the optional LLM judge layer (only runs if an Anthropic API key is available — silently falls back to static-only otherwise).',
+    {
+      name: z.string().optional().describe('Name of an existing skill to scan (loads its content via the same store as skill_read)'),
+      content: z.string().optional().describe('Raw skill/text content to scan — used when "name" is not given'),
+      llm: z.boolean().optional().default(false).describe('Also run the optional LLM judge layer, if an Anthropic API key resolves for this user/server'),
+      repo: z.string().optional(),
+    },
+    async ({ name, content, llm, repo }) => {
+      const resolved = resolveMemoryRepo(repo)
+      if (!resolved) return { content: [{ type: 'text', text: 'Repository not found.' }] }
+
+      const scanTarget = resolveScanTarget({ name, content }, (n) =>
+        withSkillsStore(resolved.path, (store) => store.get(n)?.content),
+      )
+      if ('error' in scanTarget) {
+        return { content: [{ type: 'text', text: scanTarget.error }] }
+      }
+
+      let complete: ((prompt: string) => Promise<string>) | undefined
+      if (llm) {
+        const apiKey = resolveAnthropicKey(ctx, resolved.path)
+        if (apiKey) complete = makeAnthropicComplete(apiKey)
+        // No key resolved: `complete` stays undefined → runSkillScan() runs
+        // static-only and formatScanReport() notes "requested but skipped".
+      }
+
+      const { text } = await runSkillScan(scanTarget.target, { complete, llmRequested: !!llm })
+      return { content: [{ type: 'text', text }] }
     },
   )
 

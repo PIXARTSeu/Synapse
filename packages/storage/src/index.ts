@@ -18,6 +18,11 @@ export { importSkills, recategorizeSkills, detectCategory } from './import-skill
 export type { RecategorizeResult } from './import-skills.js'
 export { applyGate } from './skill-gate.js'
 export type { GateFields } from './skill-gate.js'
+// Re-exported so consumers (e.g. codegraph's on-demand skill_scan MCP tool,
+// Task 8) don't need a direct workspace dep on @skillbrain/skill-guard —
+// mirrors how applyGate (Task 7) is exposed above.
+export { scanSkill } from '@skillbrain/skill-guard'
+export type { ScanReport, ScanSkillOpts, LlmClient, Finding, Severity, Recommendation } from '@skillbrain/skill-guard'
 export { backfillSkillUsage } from './backfill-skill-usage.js'
 export type { BackfillReport } from './backfill-skill-usage.js'
 
