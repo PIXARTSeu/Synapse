@@ -9,3 +9,7 @@
  */
 
 export const SKILL_GUARD_VERSION = '0.1.0'
+export * from './types.js'
+export { scanStatic } from './scan-static.js'
+export { scoreFindings } from './score.js'
+export { PATTERNS } from './patterns.js'
