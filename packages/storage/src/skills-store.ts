@@ -35,6 +35,13 @@ export interface Skill {
   usefulCount?: number
   sessionsSinceValidation?: number
   lastValidated?: string
+  // Security-gate verdict from @skillbrain/skill-guard — present once migration
+  // 036 is applied. riskFindings is the guard's pre-serialized JSON array (opaque
+  // to storage); populated/read by Tasks 7-9.
+  riskScore?: number
+  riskRecommendation?: 'SAFE' | 'CAUTION' | 'BLOCK'
+  riskFindings?: string
+  riskScannedAt?: string
 }
 
 export interface SkillVersion {
@@ -133,19 +140,27 @@ export class SkillsStore {
       upsert: this.db.prepare(`
         INSERT INTO skills
           (name, category, description, content, type, tags, lines, updated_at, status,
-           created_by_user_id, updated_by_user_id)
+           created_by_user_id, updated_by_user_id,
+           risk_score, risk_recommendation, risk_findings, risk_scanned_at)
         VALUES (@name, @category, @description, @content, @type, @tags, @lines, @updatedAt,
-                COALESCE(@status, 'active'), @createdBy, @updatedBy)
+                COALESCE(@status, 'active'), @createdBy, @updatedBy,
+                @riskScore, @riskRecommendation, @riskFindings, @riskScannedAt)
         ON CONFLICT(name) DO UPDATE SET
-          category           = excluded.category,
-          description        = excluded.description,
-          content            = excluded.content,
-          type               = excluded.type,
-          tags               = excluded.tags,
-          lines              = excluded.lines,
-          updated_at         = excluded.updated_at,
-          status             = COALESCE(@status, skills.status),
-          updated_by_user_id = excluded.updated_by_user_id
+          category            = excluded.category,
+          description         = excluded.description,
+          content             = excluded.content,
+          type                = excluded.type,
+          tags                = excluded.tags,
+          lines               = excluded.lines,
+          updated_at          = excluded.updated_at,
+          status              = COALESCE(@status, skills.status),
+          updated_by_user_id  = excluded.updated_by_user_id,
+          -- No scan on this upsert (importer/manual edit) must not wipe an
+          -- existing security-gate verdict — same preserve-on-null pattern as status.
+          risk_score          = COALESCE(@riskScore, skills.risk_score),
+          risk_recommendation = COALESCE(@riskRecommendation, skills.risk_recommendation),
+          risk_findings       = COALESCE(@riskFindings, skills.risk_findings),
+          risk_scanned_at     = COALESCE(@riskScannedAt, skills.risk_scanned_at)
       `),
       get: this.db.prepare('SELECT * FROM skills WHERE name = ?'),
       getUpdatedAt: this.db.prepare('SELECT updated_at FROM skills WHERE name = ?'),
@@ -302,6 +317,12 @@ export class SkillsStore {
       status: skill.status ?? null,           // explicit wins; NULL → preserve on update, 'active' on insert
       createdBy: skill.createdByUserId ?? null,
       updatedBy: changedBy ?? null,
+      // Explicit wins; NULL → preserve existing verdict on update, NULL on insert
+      // (no scan yet). See migration 036.
+      riskScore: skill.riskScore ?? null,
+      riskRecommendation: skill.riskRecommendation ?? null,
+      riskFindings: skill.riskFindings ?? null,
+      riskScannedAt: skill.riskScannedAt ?? null,
     })
 
     this.saveVersion(skill, changedBy ?? null, reason)
@@ -851,6 +872,10 @@ export class SkillsStore {
       usefulCount: row.useful_count ?? undefined,
       sessionsSinceValidation: row.sessions_since_validation ?? undefined,
       lastValidated: row.last_validated ?? undefined,
+      riskScore: row.risk_score ?? undefined,
+      riskRecommendation: row.risk_recommendation ?? undefined,
+      riskFindings: row.risk_findings ?? undefined,
+      riskScannedAt: row.risk_scanned_at ?? undefined,
     }
   }
 
