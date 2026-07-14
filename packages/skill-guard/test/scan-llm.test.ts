@@ -21,6 +21,11 @@ describe('scanLlm', () => {
     const f = await scanLlm('c', { complete: async () => 'not json' })
     expect(f).toEqual([])
   })
+
+  it('complete() rejects → resolves to [], never rejects', async () => {
+    const rejecting = async () => { throw new Error('network error') }
+    await expect(scanLlm('c', { complete: rejecting })).resolves.toEqual([])
+  })
 })
 
 describe('scanSkill', () => {

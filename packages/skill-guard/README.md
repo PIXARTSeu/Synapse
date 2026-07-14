@@ -75,3 +75,24 @@ write path (bulk import and the `skill_add`/`skill_update` MCP tools):
 - `SAFE` / `CAUTION` → the verdict is attached (`risk_*` columns) but the
   skill's status is left untouched — the gate never *promotes* a skill,
   only quarantines one.
+
+## Limitations
+
+- **This is defense-in-depth, not a sound filter.** A `BLOCK` verdict
+  (quarantine to `pending`) typically requires MULTIPLE strong signals, or
+  one egregious payload, to cross the score-51 threshold. A single
+  indicator — one `curl … | sudo bash`, one env-secret read, one
+  exfil-webhook host — usually scores `CAUTION` or `SAFE` in isolation, and
+  the skill still activates. The verdict is still recorded and surfaced
+  (`risk_score`, `risk_recommendation`, `risk_findings`) so a human/dashboard
+  can see it — but the gate itself does not block on a single indicator.
+- **Only the untrusted ingestion paths are gated.** Bulk `importSkills` and
+  the `skill_add`/`skill_update` MCP tools run `applyGate()`. Admin/dashboard
+  write paths — the `PUT /api/skills/:name` content-edit route,
+  `SkillsStore.rollback()`, and the review proposal-apply flow — do **not**
+  re-scan the new content. A skill's stored risk verdict can therefore be
+  **stale** relative to its current content after any of those operations.
+- **The write-path gate is static-only.** `applyGate()` never passes an
+  `llm` option to `scanSkill()`, by design (no per-request LLM latency/cost
+  on hot ingestion paths). The optional LLM semantic judge (`scanLlm()`)
+  only runs on-demand, via the `skill_scan` MCP tool with `llm: true`.
