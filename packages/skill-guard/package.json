@@ -1,0 +1,27 @@
+{
+  "name": "@skillbrain/skill-guard",
+  "version": "0.1.0",
+  "description": "SkillBrain security scanner for skill packages.",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest run --passWithNoTests",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.2.1"
+  },
+  "author": "Daniel De Vecchi",
+  "license": "AGPL-3.0-or-later"
+}
