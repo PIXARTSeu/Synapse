@@ -13,7 +13,9 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { openDb, closeDb } from '@skillbrain/storage'
 import { MemoryStore } from '@skillbrain/storage'
 import { SkillsStore, ConcurrencyError } from '@skillbrain/storage'
+import type { Skill } from '@skillbrain/storage'
 import { getRegistryEntry, loadRegistry } from '@skillbrain/storage'
+import { applyGate } from '@skillbrain/storage'
 import { dashboardUrl } from '../../constants.js'
 import type { ToolContext } from './index.js'
 
@@ -40,6 +42,34 @@ function withSkillsStore<T>(repoPath: string, fn: (store: SkillsStore) => T): T 
     return fn(store)
   } finally {
     closeDb(db)
+  }
+}
+
+// Async sibling of withSkillsStore — used only by skill_add/skill_update
+// (Task 7), which need to `await applyGate(...)` (security-gate scan)
+// in between reading the existing row and writing the upserted one.
+async function withSkillsStoreAsync<T>(repoPath: string, fn: (store: SkillsStore) => Promise<T>): Promise<T> {
+  const db = openDb(repoPath)
+  const store = new SkillsStore(db)
+  try {
+    return await fn(store)
+  } finally {
+    closeDb(db)
+  }
+}
+
+// Renders the top 3 findings from a gate verdict's risk_findings JSON for the
+// tool response text — so a BLOCK'd skill_add/skill_update tells the caller
+// *why*, not just that it happened.
+function formatTopFindings(riskFindings: string | undefined, limit = 3): string {
+  try {
+    const findings = JSON.parse(riskFindings ?? '[]') as { severity: string; message: string; line?: number }[]
+    return findings
+      .slice(0, limit)
+      .map((f) => `- [${f.severity}] ${f.message}${f.line ? ` (line ${f.line})` : ''}`)
+      .join('\n')
+  } catch {
+    return ''
   }
 }
 
@@ -117,31 +147,35 @@ export function registerSkillTools(server: McpServer, ctx: ToolContext): void {
       if (!resolved) return { content: [{ type: 'text', text: 'Repository not found.' }] }
 
       try {
-        const result = withSkillsStore(resolved.path, (store) => {
+        const result = await withSkillsStoreAsync(resolved.path, async (store) => {
           const existing = store.get(name)
           if (!existing) return null
-          store.upsert({
+          // Security gate (Task 7, static-only — no `llm` opt passed here; see
+          // packages/storage/src/skill-gate.ts). A BLOCK verdict forces
+          // status='pending' regardless of the `draft` flag the caller passed.
+          const gated = await applyGate<Skill>({
             ...existing,
             content,
             lines: content.split('\n').length,
             updatedAt: new Date().toISOString(),
             status: draft ? 'pending' : 'active',
-          }, { reason: reason ?? 'manual', expectedUpdatedAt })
-          return existing.name
+          })
+          store.upsert(gated, { reason: reason ?? 'manual', expectedUpdatedAt })
+          return gated
         })
 
         if (!result) {
           return { content: [{ type: 'text', text: `Skill "${name}" not found. Use skill_list to see available skills.` }] }
         }
 
-        return {
-          content: [{
-            type: 'text',
-            text: draft
-              ? `⏳ Skill "${name}" queued for review — approve at ${dashboardUrl()}/#/review${reason ? `. Reason: ${reason}` : ''}`
-              : `Skill "${name}" updated successfully.${reason ? ` Reason: ${reason}` : ''}`,
-          }],
-        }
+        const quarantined = result.riskRecommendation === 'BLOCK'
+        const text = quarantined
+          ? `🛑 Skill "${name}" was quarantined to pending — the security gate flagged this update as BLOCK (risk score ${result.riskScore}). It will NOT go live until reviewed and approved at ${dashboardUrl()}/#/review.\nTop findings:\n${formatTopFindings(result.riskFindings)}`
+          : result.status === 'pending'
+            ? `⏳ Skill "${name}" queued for review — approve at ${dashboardUrl()}/#/review${reason ? `. Reason: ${reason}` : ''}`
+            : `Skill "${name}" updated successfully.${reason ? ` Reason: ${reason}` : ''}`
+
+        return { content: [{ type: 'text', text }] }
       } catch (err) {
         if (err instanceof ConcurrencyError) {
           return { content: [{ type: 'text', text: `⚠️ ${err.message}` }] }
@@ -169,21 +203,30 @@ export function registerSkillTools(server: McpServer, ctx: ToolContext): void {
       const resolved = resolveMemoryRepo(repo)
       if (!resolved) return { content: [{ type: 'text', text: 'Repository not found.' }] }
 
-      withSkillsStore(resolved.path, (store) => {
-        store.upsert({
-          name, category, description, content, type, tags,
-          lines: content.split('\n').length,
-          updatedAt: new Date().toISOString(),
-          status: draft ? 'pending' : 'active',
-        }, { reason: 'manual' })
+      // Security gate (Task 7, static-only — no `llm` opt passed here; see
+      // packages/storage/src/skill-gate.ts). A BLOCK verdict forces
+      // status='pending' regardless of the `draft` flag the caller passed.
+      const gated = await applyGate<Skill>({
+        name, category, description, content, type, tags,
+        lines: content.split('\n').length,
+        updatedAt: new Date().toISOString(),
+        status: draft ? 'pending' : 'active',
       })
+
+      withSkillsStore(resolved.path, (store) => {
+        store.upsert(gated, { reason: 'manual' })
+      })
+
+      const quarantined = gated.riskRecommendation === 'BLOCK'
 
       return {
         content: [{
           type: 'text',
-          text: draft
-            ? `⏳ Skill "${name}" created as draft — approve at ${dashboardUrl()}/#/review`
-            : `✅ Skill "${name}" created and active.`,
+          text: quarantined
+            ? `🛑 Skill "${name}" was quarantined to pending — the security gate flagged this content as BLOCK (risk score ${gated.riskScore}). It will NOT go live until reviewed and approved at ${dashboardUrl()}/#/review.\nTop findings:\n${formatTopFindings(gated.riskFindings)}`
+            : gated.status === 'pending'
+              ? `⏳ Skill "${name}" created as draft — approve at ${dashboardUrl()}/#/review`
+              : `✅ Skill "${name}" created and active.`,
         }],
       }
     },

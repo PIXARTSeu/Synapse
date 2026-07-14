@@ -92,12 +92,13 @@ program
   .action(async (targetPath: string, opts: { full?: boolean }) => {
     try {
       const { importSkills } = await import('@skillbrain/storage')
-      const result = importSkills(targetPath, { prune: !!opts.full })
+      const result = await importSkills(targetPath, { prune: !!opts.full })
       console.log(`✅ Import complete:`)
       console.log(`   Skills: ${result.skills}`)
       console.log(`   Agents: ${result.agents}`)
       console.log(`   Commands: ${result.commands}`)
       if (opts.full) console.log(`   Pruned (deprecated): ${result.pruned}`)
+      if (result.blocked > 0) console.log(`   ⚠️  Quarantined to pending (security gate BLOCK): ${result.blocked}`)
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
       console.error(`[codegraph] Import failed: ${msg}`)

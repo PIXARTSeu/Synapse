@@ -20,6 +20,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { openDb, closeDb } from './db.js'
 import { SkillsStore, type Skill, type SkillType } from './skills-store.js'
+import { applyGate } from './skill-gate.js'
 
 function pickDir(workspacePath: string, ...segments: string[]): string {
   const newPath = path.join(workspacePath, '.claude', ...segments)
@@ -230,10 +231,10 @@ export interface ImportSkillsOptions {
   prune?: boolean
 }
 
-export function importSkills(
+export async function importSkills(
   workspacePath: string,
   opts: ImportSkillsOptions = {},
-): { skills: number; agents: number; commands: number; pruned: number } {
+): Promise<{ skills: number; agents: number; commands: number; pruned: number; blocked: number }> {
   const db = openDb(workspacePath)
   const store = new SkillsStore(db)
 
@@ -363,8 +364,22 @@ export function importSkills(
     })
   }
 
+  // Security gate: static-only scan of every skill's content before it lands in
+  // the DB (Task 7). BLOCK verdicts are quarantined to status='pending' — see
+  // ./skill-gate.ts for the full policy. Static-only here (no `llm` opt passed):
+  // this is a bulk import path with no per-user credentials to resolve
+  // synchronously — deeper LLM-judge scans are exposed on-demand via the
+  // skill_scan MCP tool instead (Task 8), not run on every ingestion write.
+  const gated = await Promise.all(skills.map((s) => applyGate(s)))
+  const blocked = gated.filter((s) => s.riskRecommendation === 'BLOCK').length
+  if (blocked > 0) {
+    // No silent gating: surface the count so an operator watching import logs
+    // (or the CLI/dashboard summary) knows some skills were quarantined.
+    console.warn(`[import-skills] security gate quarantined ${blocked} skill(s) to pending (BLOCK verdict) — review at the dashboard.`)
+  }
+
   // Batch insert
-  store.upsertBatch(skills)
+  store.upsertBatch(gated)
 
   // Optional full-sync: deprecate active skills that vanished from the bundle.
   let pruned = 0
@@ -392,7 +407,7 @@ export function importSkills(
   closeDb(db)
 
   const domainCount = skills.filter((s) => s.type === 'domain').length
-  return { skills: domainCount, agents: agentCount, commands: commandCount, pruned }
+  return { skills: domainCount, agents: agentCount, commands: commandCount, pruned, blocked }
 }
 
 function isLifecycleSkill(name: string): boolean {
@@ -456,10 +471,12 @@ if (process.argv[1]?.endsWith('import-skills.js')) {
   const prune = args.includes('--full') || args.includes('--prune')
   const workspace = args.find((a) => !a.startsWith('--')) || process.cwd()
   console.log(`Importing skills from: ${workspace}${prune ? ' (full-sync: prune enabled)' : ''}`)
-  const result = importSkills(workspace, { prune })
-  console.log(`✅ Import complete:`)
-  console.log(`   Skills: ${result.skills}`)
-  console.log(`   Agents: ${result.agents}`)
-  console.log(`   Commands: ${result.commands}`)
-  if (prune) console.log(`   Pruned (deprecated): ${result.pruned}`)
+  importSkills(workspace, { prune }).then((result) => {
+    console.log(`✅ Import complete:`)
+    console.log(`   Skills: ${result.skills}`)
+    console.log(`   Agents: ${result.agents}`)
+    console.log(`   Commands: ${result.commands}`)
+    if (prune) console.log(`   Pruned (deprecated): ${result.pruned}`)
+    if (result.blocked > 0) console.log(`   ⚠️  Quarantined to pending (security gate BLOCK): ${result.blocked}`)
+  })
 }
