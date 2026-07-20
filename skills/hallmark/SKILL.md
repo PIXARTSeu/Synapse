@@ -1,6 +1,6 @@
 ---
 name: hallmark
-description: "Anti-AI-slop design skill for greenfield pages, audits, redesigns, and design extraction from URLs or screenshots. Use when the user asks to build a new app or landing page, wants to redesign something, invokes Hallmark by name, or uses audit/redesign/study."
+description: "Anti-AI-slop design skill with four explicit modes — build (new pages), audit (score existing UI against 57 slop-test gates), redesign (rebuild with a different fingerprint while preserving copy and IA), and study (extract design DNA from a URL or screenshot into a portable design.md). Use when the user says audit, redesign, or study, invokes Hallmark by name, or wants a greenfield page that does not look AI-generated. Includes 20 built-in themes and a pre-emit self-critique pass."
 version: 1.1.0
 ---
 

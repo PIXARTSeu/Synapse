@@ -1,6 +1,6 @@
 ---
 name: taste-skill
-description: Anti-slop frontend skill for landing pages, portfolios, and redesigns. The agent reads the brief, infers the right design direction, and ships interfaces that do not look templated. Real design systems when applicable, audit-first on redesigns, strict pre-flight check.
+description: "Aesthetic-direction design skill: reads a brief, infers the right visual style and direction, and ships interfaces that do not look templated. Umbrella for concrete style variants — minimalist, brutalist, soft/premium-agency. Use when the user wants a particular vibe or aesthetic, or wants a landing page or portfolio to feel handcrafted and expensive. For explicit build/audit/redesign/study modes use hallmark; for data-backed tokens use ui-ux-pro-max."
 version: 2.0.0
 ---
 
