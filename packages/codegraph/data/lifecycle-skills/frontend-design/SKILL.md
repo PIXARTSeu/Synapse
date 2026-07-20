@@ -1,12 +1,6 @@
 ---
 name: frontend-design
-description: >
-  Create distinctive, production-grade frontend interfaces that avoid generic AI aesthetics.
-  Built on Impeccable (pbakaus) + Uncodixfy (cyxzdev) + Anthropic original.
-  Includes 20 design commands: /critique, /audit, /normalize, /polish, /harden, /animate,
-  /colorize, /bolder, /quieter, /distill, /clarify, /optimize, /extract, /adapt, /onboard,
-  /typeset, /arrange, /delight, /overdrive, /teach-impeccable.
-  Use when building web components, pages, apps, or any UI.
+description: "Component-level frontend craft toolkit with 20 iterative design commands (/critique, /audit, /normalize, /polish, /harden, /animate, /colorize, /distill, /typeset, /arrange, /delight, /clarify, /optimize). Use to refine, critique, or polish EXISTING UI components and pages — spacing, typography, motion, states, micro-interactions — or to run a specific refinement command. For generating a whole new page from a brief use hallmark; for a data-backed design system use ui-ux-pro-max."
 version: 2.0.0
 user-invocable: true
 argument-hint: "nome componente e tipo di interfaccia"
