@@ -20,17 +20,22 @@ RUN apk add --no-cache python3 make g++
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY packages/codegraph/package.json ./packages/codegraph/
 COPY packages/storage/package.json ./packages/storage/
+COPY packages/skill-guard/package.json ./packages/skill-guard/
 
 RUN corepack enable && pnpm install --frozen-lockfile
 
 # Copy sources
+COPY packages/skill-guard/src/ ./packages/skill-guard/src/
+COPY packages/skill-guard/tsconfig.json ./packages/skill-guard/
+
 COPY packages/storage/src/ ./packages/storage/src/
 COPY packages/storage/tsconfig.json ./packages/storage/
 
 COPY packages/codegraph/src/ ./packages/codegraph/src/
 COPY packages/codegraph/tsconfig.json ./packages/codegraph/
 
-# Build storage first (codegraph depends on it)
+# Build skill-guard first (storage depends on it), then storage (codegraph depends on it)
+RUN pnpm --filter @skillbrain/skill-guard build
 RUN pnpm --filter @skillbrain/storage build
 
 # Build codegraph (package name is "codegraph", not scoped)

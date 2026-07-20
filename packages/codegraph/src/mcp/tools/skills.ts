@@ -9,13 +9,18 @@
  */
 
 import { z } from 'zod'
+import Anthropic from '@anthropic-ai/sdk'
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { openDb, closeDb } from '@skillbrain/storage'
 import { MemoryStore } from '@skillbrain/storage'
 import { SkillsStore, ConcurrencyError } from '@skillbrain/storage'
+import type { Skill } from '@skillbrain/storage'
 import { getRegistryEntry, loadRegistry } from '@skillbrain/storage'
+import { applyGate } from '@skillbrain/storage'
+import { UsersEnvStore } from '@skillbrain/storage'
 import { dashboardUrl } from '../../constants.js'
 import type { ToolContext } from './index.js'
+import { resolveScanTarget, runSkillScan } from './skill-scan.js'
 
 const MEMORY_REPO_NAME = process.env.SKILLBRAIN_MEMORY_REPO || 'skillbrain'
 const SKILLBRAIN_ROOT = process.env.SKILLBRAIN_ROOT || ''
@@ -43,7 +48,75 @@ function withSkillsStore<T>(repoPath: string, fn: (store: SkillsStore) => T): T 
   }
 }
 
+// Async sibling of withSkillsStore — used only by skill_add/skill_update
+// (Task 7), which need to `await applyGate(...)` (security-gate scan)
+// in between reading the existing row and writing the upserted one.
+async function withSkillsStoreAsync<T>(repoPath: string, fn: (store: SkillsStore) => Promise<T>): Promise<T> {
+  const db = openDb(repoPath)
+  const store = new SkillsStore(db)
+  try {
+    return await fn(store)
+  } finally {
+    closeDb(db)
+  }
+}
+
+// Renders the top 3 findings from a gate verdict's risk_findings JSON for the
+// tool response text — so a BLOCK'd skill_add/skill_update tells the caller
+// *why*, not just that it happened.
+function formatTopFindings(riskFindings: string | undefined, limit = 3): string {
+  try {
+    const findings = JSON.parse(riskFindings ?? '[]') as { severity: string; message: string; line?: number }[]
+    return findings
+      .slice(0, limit)
+      .map((f) => `- [${f.severity}] ${f.message}${f.line ? ` (line ${f.line})` : ''}`)
+      .join('\n')
+  } catch {
+    return ''
+  }
+}
+
 const skillTypes = ['domain', 'lifecycle', 'process', 'agent', 'command'] as const
+
+// Resolves an Anthropic API key for skill_scan's optional LLM judge layer
+// (Task 8). Precedence mirrors http-server.ts's resolveCredentials():
+// per-user key (UsersEnvStore) first, then the server-wide fallback
+// (ctx.anthropicApiKey, set from process.env.ANTHROPIC_API_KEY). Returns
+// null (never throws) when neither resolves — callers fall back to
+// static-only rather than erroring.
+function resolveAnthropicKey(ctx: ToolContext, repoPath: string): string | null {
+  if (ctx.userId) {
+    try {
+      const db = openDb(repoPath)
+      try {
+        const userKey = new UsersEnvStore(db).getEnv(ctx.userId, 'ANTHROPIC_API_KEY')
+        if (userKey) return userKey
+      } finally {
+        closeDb(db)
+      }
+    } catch {
+      // Encryption unavailable, no entry, or DB error — fall through to server key.
+    }
+  }
+  return ctx.anthropicApiKey || null
+}
+
+// LLM completion callback for skill_scan's optional judge layer — wraps the
+// Anthropic client the same way review.ts's generate-proposal route does
+// (review.ts:183-184): `new Anthropic({ apiKey })`, then a single
+// messages.create() call, returning the text block.
+function makeAnthropicComplete(apiKey: string): (prompt: string) => Promise<string> {
+  const client = new Anthropic({ apiKey })
+  return async (prompt: string) => {
+    const response = await client.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 1024,
+      messages: [{ role: 'user', content: prompt }],
+    })
+    const block = response.content[0]
+    return block && block.type === 'text' ? block.text : ''
+  }
+}
 
 export function registerSkillTools(server: McpServer, ctx: ToolContext): void {
   // --- Tool: skill_list ---
@@ -117,31 +190,35 @@ export function registerSkillTools(server: McpServer, ctx: ToolContext): void {
       if (!resolved) return { content: [{ type: 'text', text: 'Repository not found.' }] }
 
       try {
-        const result = withSkillsStore(resolved.path, (store) => {
+        const result = await withSkillsStoreAsync(resolved.path, async (store) => {
           const existing = store.get(name)
           if (!existing) return null
-          store.upsert({
+          // Security gate (Task 7, static-only — no `llm` opt passed here; see
+          // packages/storage/src/skill-gate.ts). A BLOCK verdict forces
+          // status='pending' regardless of the `draft` flag the caller passed.
+          const gated = await applyGate<Skill>({
             ...existing,
             content,
             lines: content.split('\n').length,
             updatedAt: new Date().toISOString(),
             status: draft ? 'pending' : 'active',
-          }, { reason: reason ?? 'manual', expectedUpdatedAt })
-          return existing.name
+          })
+          store.upsert(gated, { reason: reason ?? 'manual', expectedUpdatedAt })
+          return gated
         })
 
         if (!result) {
           return { content: [{ type: 'text', text: `Skill "${name}" not found. Use skill_list to see available skills.` }] }
         }
 
-        return {
-          content: [{
-            type: 'text',
-            text: draft
-              ? `⏳ Skill "${name}" queued for review — approve at ${dashboardUrl()}/#/review${reason ? `. Reason: ${reason}` : ''}`
-              : `Skill "${name}" updated successfully.${reason ? ` Reason: ${reason}` : ''}`,
-          }],
-        }
+        const quarantined = result.riskRecommendation === 'BLOCK'
+        const text = quarantined
+          ? `🛑 Skill "${name}" was quarantined to pending — the security gate flagged this update as BLOCK (risk score ${result.riskScore}). It will NOT go live until reviewed and approved at ${dashboardUrl()}/#/review.\nTop findings:\n${formatTopFindings(result.riskFindings)}`
+          : result.status === 'pending'
+            ? `⏳ Skill "${name}" queued for review — approve at ${dashboardUrl()}/#/review${reason ? `. Reason: ${reason}` : ''}`
+            : `Skill "${name}" updated successfully.${reason ? ` Reason: ${reason}` : ''}`
+
+        return { content: [{ type: 'text', text }] }
       } catch (err) {
         if (err instanceof ConcurrencyError) {
           return { content: [{ type: 'text', text: `⚠️ ${err.message}` }] }
@@ -169,23 +246,71 @@ export function registerSkillTools(server: McpServer, ctx: ToolContext): void {
       const resolved = resolveMemoryRepo(repo)
       if (!resolved) return { content: [{ type: 'text', text: 'Repository not found.' }] }
 
-      withSkillsStore(resolved.path, (store) => {
-        store.upsert({
-          name, category, description, content, type, tags,
-          lines: content.split('\n').length,
-          updatedAt: new Date().toISOString(),
-          status: draft ? 'pending' : 'active',
-        }, { reason: 'manual' })
+      // Security gate (Task 7, static-only — no `llm` opt passed here; see
+      // packages/storage/src/skill-gate.ts). A BLOCK verdict forces
+      // status='pending' regardless of the `draft` flag the caller passed.
+      const gated = await applyGate<Skill>({
+        name, category, description, content, type, tags,
+        lines: content.split('\n').length,
+        updatedAt: new Date().toISOString(),
+        status: draft ? 'pending' : 'active',
       })
+
+      withSkillsStore(resolved.path, (store) => {
+        store.upsert(gated, { reason: 'manual' })
+      })
+
+      const quarantined = gated.riskRecommendation === 'BLOCK'
 
       return {
         content: [{
           type: 'text',
-          text: draft
-            ? `⏳ Skill "${name}" created as draft — approve at ${dashboardUrl()}/#/review`
-            : `✅ Skill "${name}" created and active.`,
+          text: quarantined
+            ? `🛑 Skill "${name}" was quarantined to pending — the security gate flagged this content as BLOCK (risk score ${gated.riskScore}). It will NOT go live until reviewed and approved at ${dashboardUrl()}/#/review.\nTop findings:\n${formatTopFindings(gated.riskFindings)}`
+            : gated.status === 'pending'
+              ? `⏳ Skill "${name}" created as draft — approve at ${dashboardUrl()}/#/review`
+              : `✅ Skill "${name}" created and active.`,
         }],
       }
+    },
+  )
+
+  // --- Tool: skill_scan ---
+  // On-demand counterpart to the ingestion gate (applyGate, Task 7). That
+  // write-path gate is static-only by design (see skill-gate.ts's rationale —
+  // no per-request LLM latency/cost on every skill_add/skill_update). Here,
+  // on-demand, the optional LLM judge layer built in Task 5
+  // (@skillbrain/skill-guard's scanLlm) is actually exposed via `llm: true`.
+  server.tool(
+    'skill_scan',
+    'Run an on-demand security scan of a skill (by name or raw content) using the skill-guard static scanner. Set llm:true to also run the optional LLM judge layer (only runs if an Anthropic API key is available — silently falls back to static-only otherwise).',
+    {
+      name: z.string().optional().describe('Name of an existing skill to scan (loads its content via the same store as skill_read)'),
+      content: z.string().optional().describe('Raw skill/text content to scan — used when "name" is not given'),
+      llm: z.boolean().optional().default(false).describe('Also run the optional LLM judge layer, if an Anthropic API key resolves for this user/server'),
+      repo: z.string().optional(),
+    },
+    async ({ name, content, llm, repo }) => {
+      const resolved = resolveMemoryRepo(repo)
+      if (!resolved) return { content: [{ type: 'text', text: 'Repository not found.' }] }
+
+      const scanTarget = resolveScanTarget({ name, content }, (n) =>
+        withSkillsStore(resolved.path, (store) => store.get(n)?.content),
+      )
+      if ('error' in scanTarget) {
+        return { content: [{ type: 'text', text: scanTarget.error }] }
+      }
+
+      let complete: ((prompt: string) => Promise<string>) | undefined
+      if (llm) {
+        const apiKey = resolveAnthropicKey(ctx, resolved.path)
+        if (apiKey) complete = makeAnthropicComplete(apiKey)
+        // No key resolved: `complete` stays undefined → runSkillScan() runs
+        // static-only and formatScanReport() notes "requested but skipped".
+      }
+
+      const { text } = await runSkillScan(scanTarget.target, { complete, llmRequested: !!llm })
+      return { content: [{ type: 'text', text }] }
     },
   )
 

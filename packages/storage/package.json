@@ -20,6 +20,7 @@
   },
   "dependencies": {
     "@huggingface/transformers": "^3.5.0",
+    "@skillbrain/skill-guard": "workspace:*",
     "better-sqlite3": "^11.8.1"
   },
   "devDependencies": {

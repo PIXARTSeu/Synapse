@@ -1,0 +1,13 @@
+@skillbrain/skill-guard
+
+Portions of this package (detection pattern catalog, severity/scoring model,
+and the LLM judge prompt structure) are derived from NVIDIA SkillSpector
+(https://github.com/nvidia/skillspector), licensed under the Apache License 2.0.
+
+Derived concepts and source files referenced:
+- Scoring model: nodes/report.py, constants.py
+- Static regex patterns: nodes/analyzers/static_patterns_*.py
+- YARA-derived webhook indicators: yara_rules/agent_skills.yar
+- LLM semantic prompt structure: semantic_security_discovery.py, llm_analyzer_base.py
+
+Copyright 2026 NVIDIA CORPORATION & AFFILIATES, Apache-2.0.

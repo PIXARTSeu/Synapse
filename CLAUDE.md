@@ -215,6 +215,8 @@ Every skill must have:
 - Description that includes **trigger keywords** so `skill_route` can find it via FTS
 - Body in markdown — no fixed structure required, but the "Overview / When to use / Process / Examples" template (see `.claude/skill/skill-template-2.0/`) is recommended
 
+All imported/added skills are security-scanned by `@skillbrain/skill-guard`; a `BLOCK` verdict forces `status='pending'` pending human review. This is defense-in-depth, not a sound filter — a single indicator (one `curl | bash`, one secret read) usually scores `CAUTION`/`SAFE` and still activates; admin content-edit, `SkillsStore.rollback()`, and review proposal-apply paths do not re-scan, so a verdict can go stale (see `packages/skill-guard/README.md#limitations`).
+
 Skills with confidence ≤ 3 and ≥ 30 sessions stale are auto-deprecated by `skill_decay`. Skills routed but never loaded after 30 days are flagged by `skill_gc`.
 
 ---

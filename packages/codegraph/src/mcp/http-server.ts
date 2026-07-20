@@ -478,7 +478,7 @@ export async function startHttpServer(port: number, authToken?: string): Promise
         }
 
         const mcpUserId = (req as any).mcpUserId as string | undefined
-        const server = createMcpServer({ userId: mcpUserId })
+        const server = createMcpServer({ userId: mcpUserId, anthropicApiKey: ANTHROPIC_API_KEY })
         await server.connect(transport)
       } else {
         res.status(400).json({ error: 'No valid session. Send an initialize request first.' })
@@ -531,7 +531,7 @@ export async function startHttpServer(port: number, authToken?: string): Promise
     sseTransports.set(transport.sessionId, transport)
     transport.onclose = () => { sseTransports.delete(transport.sessionId) }
     const mcpUserId = (req as any).mcpUserId as string | undefined
-    const server = createMcpServer({ userId: mcpUserId })
+    const server = createMcpServer({ userId: mcpUserId, anthropicApiKey: ANTHROPIC_API_KEY })
     await server.connect(transport)
     // start() is invoked by connect(); nothing more to do here — the response stays open
   })

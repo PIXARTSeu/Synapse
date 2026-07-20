@@ -24,6 +24,7 @@ Thumbs.db
 # ─── Build artifacts ──────────────────────────────────────────────────────────
 packages/codegraph/dist/
 packages/storage/dist/
+packages/skill-guard/dist/
 
 # ─── Node (nei progetti dentro Progetti/) ─────────────────────────────────────
 Progetti/*/node_modules/

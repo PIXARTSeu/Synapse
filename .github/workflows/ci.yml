@@ -23,6 +23,9 @@ jobs:
       - name: Install workspace dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Build skill-guard (workspace dependency)
+        run: pnpm --filter @skillbrain/skill-guard build
+
       - name: Build storage (workspace dependency)
         run: pnpm --filter @skillbrain/storage build
 
@@ -40,3 +43,6 @@ jobs:
 
       - name: Test storage
         run: pnpm --filter @skillbrain/storage test
+
+      - name: Test skill-guard
+        run: pnpm --filter @skillbrain/skill-guard test

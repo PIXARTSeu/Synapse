@@ -26,8 +26,13 @@ export function createReviewRouter(ctx: RouteContext): Router {
       const memories = db.prepare(
         `SELECT id, type, context, solution, skill, tags, created_at FROM memories WHERE status = 'pending-review' ORDER BY created_at DESC LIMIT ? OFFSET ?`
       ).all(limit, offset)
+      // risk_score / risk_recommendation / risk_findings come from the
+      // @skillbrain/skill-guard security gate (migration 036) — a skill lands
+      // here with status='pending' either because it's awaiting normal human
+      // review, or because the gate verdict was BLOCK. Surfacing the three
+      // columns lets the dashboard render a risk badge without a second call.
       const skills = db.prepare(
-        `SELECT name, category, description, type, updated_at FROM skills WHERE status = 'pending' ORDER BY updated_at DESC`
+        `SELECT name, category, description, type, updated_at, risk_score, risk_recommendation, risk_findings FROM skills WHERE status = 'pending' ORDER BY updated_at DESC`
       ).all()
       const components = db.prepare(
         `SELECT id, name, project, section_type, description, created_at FROM ui_components WHERE status = 'pending' ORDER BY created_at DESC`
