@@ -217,6 +217,8 @@ Every skill must have:
 
 All imported/added skills are security-scanned by `@skillbrain/skill-guard`; a `BLOCK` verdict forces `status='pending'` pending human review. This is defense-in-depth, not a sound filter — a single indicator (one `curl | bash`, one secret read) usually scores `CAUTION`/`SAFE` and still activates; admin content-edit, `SkillsStore.rollback()`, and review proposal-apply paths do not re-scan, so a verdict can go stale (see `packages/skill-guard/README.md#limitations`).
 
+`memory_add` runs the same scanner over the memory's free text, with the same limits: blatant multi-signal injection is quarantined to `pending-review`, one plausible-sounding instruction is not. Memories are replayed verbatim into later sessions, so the load-bearing control there is the render boundary, not the scanner — `session_resume` passes every stored string through `asData()` (flattens newlines, strips zero-width/bidi and leading markdown, caps length) and labels the block as recorded data rather than instructions.
+
 Skills with confidence ≤ 3 and ≥ 30 sessions stale are auto-deprecated by `skill_decay`. Skills routed but never loaded after 30 days are flagged by `skill_gc`.
 
 ---

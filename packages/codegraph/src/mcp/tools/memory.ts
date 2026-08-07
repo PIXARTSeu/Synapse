@@ -14,6 +14,7 @@ import { openDb, closeDb } from '@skillbrain/storage'
 import { MemoryStore } from '@skillbrain/storage'
 import { SkillsStore } from '@skillbrain/storage'
 import { getRegistryEntry, loadRegistry } from '@skillbrain/storage'
+import { applyGate } from '@skillbrain/storage'
 import { dashboardUrl } from '../../constants.js'
 import type { ToolContext } from './index.js'
 
@@ -102,6 +103,17 @@ export function registerMemoryTools(server: McpServer, _ctx: ToolContext): void 
         ) ?? undefined
       }
 
+      // Security gate — same scanner that guards skill writes (applyGate), applied
+      // to memory writes for the same reason. A memory is replayed verbatim into
+      // future sessions by session_resume/memory_query, so instruction-shaped text
+      // stored here is a persistent injection channel, not just a bad note.
+      // BLOCK quarantines to pending-review; SAFE/CAUTION pass through untouched.
+      const gate = await applyGate({
+        content: [context, problem, solution, reason, ...(tags ?? [])].filter(Boolean).join('\n'),
+      })
+      const quarantined = gate.riskRecommendation === 'BLOCK'
+      const effectiveDraft = draft || quarantined
+
       const memory = withMemoryStore(resolved.path, (store) => {
         // Check for near-duplicates before adding
         const existing = store.findDuplicate({ type, context, problem, solution, reason, tags })
@@ -109,7 +121,7 @@ export function registerMemoryTools(server: McpServer, _ctx: ToolContext): void 
           return { mem: null, duplicate: existing, contradictionWarnings: [] }
         }
 
-        const mem = store.add({ type, context, problem, solution, reason, tags, confidence, importance, scope, project, skill: effectiveSkill, status: draft ? 'pending-review' : 'active' })
+        const mem = store.add({ type, context, problem, solution, reason, tags, confidence, importance, scope, project, skill: effectiveSkill, status: effectiveDraft ? 'pending-review' : 'active' })
         const contradictions = store.detectContradictions(mem)
         const contradictionWarnings = contradictions.map((c) =>
           `⚠️ Potential contradiction with ${c.id}: "${c.context.slice(0, 80)}..."`,
@@ -127,7 +139,7 @@ export function registerMemoryTools(server: McpServer, _ctx: ToolContext): void 
       //     sessions_since_validation, and inserts skill_usage row (see Step 2).
       //   - linkMemoryToSkill(...) → creates the Memory--DerivedFrom→Skill edge
       //     (Step 4) so the dashboard Graph view and contextual skill_route work.
-      if (memory.mem && !draft) {
+      if (memory.mem && !effectiveDraft) {
         const skillsFromTags = (tags || [])
           .filter((t): t is string => typeof t === 'string' && t.startsWith('skill:'))
           .map((t) => t.slice('skill:'.length).trim())
@@ -162,9 +174,16 @@ export function registerMemoryTools(server: McpServer, _ctx: ToolContext): void 
         return { content: [{ type: 'text', text }] }
       }
 
-      let text = draft
+      let text = effectiveDraft
         ? `⏳ Memory queued for review: ${memory.mem!.id} (${memory.mem!.type}) — approve at ${dashboardUrl()}/#/review`
         : `✅ Memory added: ${memory.mem!.id} (${memory.mem!.type}, confidence: ${memory.mem!.confidence})`
+      if (quarantined) {
+        const reasons = JSON.parse(gate.riskFindings || '[]')
+          .map((f: any) => f.message || f.ruleId)
+          .filter(Boolean)
+        text += `\n\n🛡️ Quarantined by the security gate (risk score ${gate.riskScore}) — it will not be served to future sessions until a human approves it.`
+        if (reasons.length > 0) text += `\nFlagged: ${Array.from(new Set(reasons)).join('; ')}`
+      }
       if (memory.contradictionWarnings.length > 0) {
         text += '\n\n' + memory.contradictionWarnings.join('\n')
         text += '\n\nUse memory_add_edge to create Contradicts edges if confirmed.'

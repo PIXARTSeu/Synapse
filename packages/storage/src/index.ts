@@ -12,7 +12,7 @@
 export { openDb, closeDb, getDbPath, getCodegraphDir, clearDb } from './db.js'
 export { runMigrations, getAppliedMigrations } from './migrator.js'
 export { loadMeta, saveMeta } from './meta.js'
-export { loadRegistry, getRegistryEntry, upsertRegistry, removeFromRegistry } from './registry.js'
+export { loadRegistry, getRegistryEntry, upsertRegistry, removeFromRegistry, isTrustedWorkspace, trustedWorkspaceRoots } from './registry.js'
 export { migrate, migrate as migrateLearnings } from './migrate-learnings.js'
 export { importSkills, recategorizeSkills, detectCategory } from './import-skills.js'
 export type { RecategorizeResult } from './import-skills.js'

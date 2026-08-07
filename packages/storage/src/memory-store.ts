@@ -9,9 +9,10 @@
  */
 
 import type Database from 'better-sqlite3'
-import { execSync } from 'node:child_process'
+import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import { randomId } from './utils/hash.js'
+import { isTrustedWorkspace } from './registry.js'
 import { MEMORY_DECAY_INTERVAL_HOURS, SESSION_STALE_THRESHOLD_MS } from './constants.js'
 import { deriveEdgeCandidates } from './memory-edge-derivation.js'
 import { EmbeddingService, vectorToBlob, blobToVector, cosine } from './embedding-service.js'
@@ -1315,17 +1316,43 @@ export class MemoryStore {
   /**
    * Detect workType and deliverables from git commits in the workspace
    * made after the session started.
+   *
+   * Security: `workspacePath` comes from session_start and is caller-controlled,
+   * so this is the one place where a stored session field turns into a
+   * subprocess. Two guards, because "the command string is not injectable" is
+   * not the whole threat:
+   *   1. The directory must be a trusted workspace (isTrustedWorkspace) — git
+   *      reads config from the repo it runs in, so `cwd` alone is a capability.
+   *   2. execFileSync with an argv array (no shell), plus core.fsmonitor pinned
+   *      off. `git log` does not consult fsmonitor today — only commands that
+   *      refresh the index do — so that flag is belt-and-braces against this
+   *      call growing into one that does, not a fix for a live hole.
+   * Both failures degrade silently: auto-close still writes its summary, just
+   * without commit-derived workType/deliverables.
    */
   private detectWorkFromGit(workspacePath: string | undefined, sessionStart: string): { workType: string | null; deliverables: string | null; commits: string[] } {
     if (!workspacePath || !fs.existsSync(workspacePath)) {
       return { workType: null, deliverables: null, commits: [] }
     }
+    if (!isTrustedWorkspace(workspacePath)) {
+      return { workType: null, deliverables: null, commits: [] }
+    }
 
     try {
       const since = new Date(sessionStart).toISOString()
-      const log = execSync(
-        `git log --since="${since}" --pretty=format:"%H|%s" --no-merges`,
-        { cwd: workspacePath, stdio: ['pipe', 'pipe', 'pipe'], encoding: 'utf-8' },
+      const log = execFileSync(
+        'git',
+        [
+          '-c', 'core.fsmonitor=false',
+          'log', `--since=${since}`, '--pretty=format:%H|%s', '--no-merges',
+        ],
+        {
+          cwd: workspacePath,
+          stdio: ['pipe', 'pipe', 'pipe'],
+          encoding: 'utf-8',
+          timeout: 10_000,
+          maxBuffer: 4 * 1024 * 1024,
+        },
       ).trim()
 
       if (!log) return { workType: null, deliverables: null, commits: [] }

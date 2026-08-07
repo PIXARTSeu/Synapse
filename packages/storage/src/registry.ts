@@ -71,3 +71,49 @@ export function getRegistryEntry(nameOrPath: string): RegistryEntry | undefined 
   const entries = loadRegistry()
   return entries.find((e) => e.name === nameOrPath || e.path === nameOrPath)
 }
+
+// ── Workspace trust ────────────────────────────────────
+//
+// `workspace_path` on a session row is whatever session_start recorded — an
+// unvalidated string chosen by the caller (i.e. by the model). Any code that
+// shells out with that value as `cwd` must first check it against this
+// allowlist: running a subprocess inside an arbitrary directory is enough to
+// hand over control, because tools like git read configuration from the
+// directory they run in (core.fsmonitor et al).
+//
+// Trusted roots = registered repos + SKILLBRAIN_ROOT, plus anything the
+// operator opts into via SKILLBRAIN_TRUSTED_WORKSPACE_ROOTS (path-separated).
+
+function resolveReal(p: string): string | null {
+  try {
+    return fs.realpathSync(p)
+  } catch {
+    return null
+  }
+}
+
+export function trustedWorkspaceRoots(): string[] {
+  const roots = loadRegistry().map((e) => e.path)
+  if (process.env.SKILLBRAIN_ROOT) roots.push(process.env.SKILLBRAIN_ROOT)
+  const extra = process.env.SKILLBRAIN_TRUSTED_WORKSPACE_ROOTS
+  if (extra) roots.push(...extra.split(path.delimiter).filter(Boolean))
+  return Array.from(new Set(roots))
+}
+
+/**
+ * True when `candidate` resolves to a trusted root or a directory beneath one.
+ * Both sides are realpath'd first so a symlink planted inside a trusted root
+ * cannot point the subprocess somewhere else.
+ */
+export function isTrustedWorkspace(candidate: string | undefined | null): boolean {
+  if (!candidate) return false
+  const real = resolveReal(candidate)
+  if (!real) return false
+
+  for (const root of trustedWorkspaceRoots()) {
+    const realRoot = resolveReal(root)
+    if (!realRoot) continue
+    if (real === realRoot || real.startsWith(realRoot + path.sep)) return true
+  }
+  return false
+}
