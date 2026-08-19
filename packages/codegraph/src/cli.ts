@@ -89,14 +89,21 @@ program
   .description('Import skills, agents, and commands from filesystem into SQLite')
   .argument('[path]', 'Path to workspace root', '.')
   .option('--full', 'Full-sync: also deprecate active skills no longer present in the bundle (protects System/Lifecycle)')
-  .action(async (targetPath: string, opts: { full?: boolean }) => {
+  .option('--force', 'With --full: override the blast-radius guard that refuses a prune wiping most of the catalog')
+  .option('--reactivate', 'Recovery: restore deprecated skills that ARE present in the bundle back to active (undoes a bad --full)')
+  .action(async (targetPath: string, opts: { full?: boolean; force?: boolean; reactivate?: boolean }) => {
     try {
       const { importSkills } = await import('@skillbrain/storage')
-      const result = await importSkills(targetPath, { prune: !!opts.full })
+      const result = await importSkills(targetPath, {
+        prune: !!opts.full,
+        force: !!opts.force,
+        reactivate: !!opts.reactivate,
+      })
       console.log(`✅ Import complete:`)
       console.log(`   Skills: ${result.skills}`)
       console.log(`   Agents: ${result.agents}`)
       console.log(`   Commands: ${result.commands}`)
+      if (opts.reactivate) console.log(`   Reactivated: ${result.reactivated}`)
       if (opts.full) console.log(`   Pruned (deprecated): ${result.pruned}`)
       if (result.blocked > 0) console.log(`   ⚠️  Quarantined to pending (security gate BLOCK): ${result.blocked}`)
     } catch (err: unknown) {

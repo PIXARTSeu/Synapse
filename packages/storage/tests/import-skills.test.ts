@@ -135,6 +135,164 @@ describe('importSkills()', () => {
     }
   })
 
+  // Regression: CRLF frontmatter must parse. Every frontmatter pattern is
+  // anchored on \n, so a Windows-authored SKILL.md failed the opening `^---\n`
+  // match and lost its whole frontmatter — the skill silently kept its directory
+  // name and a placeholder description, losing the trigger keywords skill_route
+  // ranks on. Two shipped SEO skills were in exactly this state.
+  it('parses frontmatter from a CRLF file, including folded descriptions', async () => {
+    const workspace = makeWorkspace()
+    const dir = path.join(workspace, '.claude', 'skill', 'crlf-skill')
+    fs.mkdirSync(dir, { recursive: true })
+    fs.writeFileSync(
+      path.join(dir, 'SKILL.md'),
+      [
+        '---',
+        'name: crlf-skill',
+        'description: >',
+        '  Deep single-page SEO analysis. Use when the user says',
+        '  "analyze this page" or provides a single URL.',
+        'version: 1.0.0',
+        '---',
+        '',
+        '# CRLF Skill',
+        '',
+        'Body content.',
+      ].join('\r\n'),
+    )
+
+    await importSkills(workspace)
+
+    const db = new Database(path.join(workspace, '.codegraph', 'graph.db'))
+    try {
+      const row = db.prepare("SELECT name, description FROM skills WHERE name = 'crlf-skill'").get() as
+        | { name: string; description: string }
+        | undefined
+      expect(row).toBeTruthy()
+      // The folded description must survive — not the "Domain skill: …" fallback.
+      expect(row?.description).toContain('Deep single-page SEO analysis')
+      expect(row?.description).toContain('analyze this page')
+      expect(row?.description).not.toContain('Domain skill:')
+    } finally {
+      db.close()
+    }
+  })
+
+  // Regression: a PARTIAL discovery must not be allowed to gut the catalog.
+  //
+  // The original guard only refused `--full` when 0 skills were discovered, so a
+  // run that found a small slice of the bundle (wrong path, half-populated
+  // volume, missing symlinks) sailed straight through and deprecated everything
+  // else. In production that soft-deleted ~266 of 293 skills and left routing
+  // answering every query from the handful of survivors.
+  it('--full does NOT prune when the discovery set is a small slice of the catalog', async () => {
+    const workspace = makeWorkspace()
+    const writeSkill = (name: string) => {
+      const dir = path.join(workspace, '.claude', 'skill', name)
+      fs.mkdirSync(dir, { recursive: true })
+      fs.writeFileSync(path.join(dir, 'SKILL.md'), `---\nname: ${name}\ndescription: desc ${name}\n---\n# ${name}\n`)
+    }
+
+    // A 40-skill catalog, all active.
+    for (let i = 0; i < 40; i++) writeSkill(`skill-${i}`)
+    await importSkills(workspace)
+
+    const dbPath = path.join(workspace, '.codegraph', 'graph.db')
+    const countActive = () => {
+      const db = new Database(dbPath)
+      try {
+        return (db.prepare("SELECT COUNT(*) AS c FROM skills WHERE status = 'active'").get() as { c: number }).c
+      } finally {
+        db.close()
+      }
+    }
+    expect(countActive()).toBe(40)
+
+    // Simulate a wrong/partial bundle path: only 2 of the 40 are discoverable.
+    for (let i = 2; i < 40; i++) {
+      fs.rmSync(path.join(workspace, '.claude', 'skill', `skill-${i}`), { recursive: true, force: true })
+    }
+
+    const result = await importSkills(workspace, { prune: true })
+    expect(result.pruned).toBe(0)      // refused — 38/40 is 95%, far past the limit
+    expect(countActive()).toBe(40)     // catalog untouched
+
+    // …and `force` is the explicit override for a genuinely intended removal.
+    const forced = await importSkills(workspace, { prune: true, force: true })
+    expect(forced.pruned).toBe(38)
+    expect(countActive()).toBe(2)
+  })
+
+  // --reactivate is the recovery path for a prune that should never have run.
+  it('--reactivate restores bundled deprecated skills but leaves retired and pending ones alone', async () => {
+    const workspace = makeWorkspace()
+    const writeSkill = (name: string) => {
+      const dir = path.join(workspace, '.claude', 'skill', name)
+      fs.mkdirSync(dir, { recursive: true })
+      fs.writeFileSync(path.join(dir, 'SKILL.md'), `---\nname: ${name}\ndescription: desc ${name}\n---\n# ${name}\n`)
+    }
+    writeSkill('still-bundled')
+    await importSkills(workspace)
+
+    const dbPath = path.join(workspace, '.codegraph', 'graph.db')
+    const seed = new Database(dbPath)
+    const now = new Date().toISOString()
+    // A bad prune deprecated a skill that IS still in the bundle…
+    seed.prepare("UPDATE skills SET status = 'deprecated' WHERE name = 'still-bundled'").run()
+    // …a genuinely retired skill whose files are gone…
+    seed.prepare(
+      `INSERT INTO skills (name, category, description, content, type, tags, lines, updated_at, status)
+       VALUES ('retired', 'Backend', 'd', '#', 'domain', '[]', 1, ?, 'deprecated')`,
+    ).run(now)
+    // …and a security-gate quarantine awaiting human review.
+    seed.prepare(
+      `INSERT INTO skills (name, category, description, content, type, tags, lines, updated_at, status)
+       VALUES ('quarantined', 'Backend', 'd', '#', 'domain', '[]', 1, ?, 'pending')`,
+    ).run(now)
+    seed.close()
+
+    const result = await importSkills(workspace, { reactivate: true })
+    expect(result.reactivated).toBe(1)
+
+    const db = new Database(dbPath)
+    try {
+      const status = (n: string) => (db.prepare('SELECT status AS s FROM skills WHERE name = ?').get(n) as { s: string }).s
+      expect(status('still-bundled')).toBe('active')     // restored
+      expect(status('retired')).toBe('deprecated')       // not in bundle → stays retired
+      expect(status('quarantined')).toBe('pending')      // never auto-approved
+    } finally {
+      db.close()
+    }
+  })
+
+  // A name present in both zones must land in the DB once, deterministically —
+  // not twice with whichever copy was walked last silently deciding its type.
+  it('collapses a skill discovered in both .claude/skill and .agents/skills', async () => {
+    const workspace = makeWorkspace()
+
+    const domainDir = path.join(workspace, '.claude', 'skill', 'shared-skill')
+    fs.mkdirSync(domainDir, { recursive: true })
+    fs.writeFileSync(domainDir + '/SKILL.md', `---\nname: shared-skill\ndescription: domain copy\n---\n# shared\n`)
+
+    const processDir = path.join(workspace, '.agents', 'skills', 'shared-skill')
+    fs.mkdirSync(processDir, { recursive: true })
+    fs.writeFileSync(processDir + '/SKILL.md', `---\nname: shared-skill\ndescription: process copy\n---\n# shared\n`)
+
+    await importSkills(workspace)
+
+    const db = new Database(path.join(workspace, '.codegraph', 'graph.db'))
+    try {
+      const rows = db.prepare("SELECT type, description FROM skills WHERE name = 'shared-skill'").all() as
+        { type: string; description: string }[]
+      expect(rows).toHaveLength(1)
+      // Zones are walked domain → lifecycle/process, so the .agents/skills copy wins.
+      expect(rows[0].type).toBe('process')
+      expect(rows[0].description).toBe('process copy')
+    } finally {
+      db.close()
+    }
+  })
+
   // Task 7: security gate wired into the importer (static-only, no LLM).
   // Fixture scores 59 under the real scan-static/score engine (piped-curl-to-
   // sudo-bash + SSH-key exfiltration inside an exec block) — verified via a

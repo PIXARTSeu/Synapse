@@ -593,7 +593,19 @@ export function registerSkillTools(server: McpServer, ctx: ToolContext): void {
       if (!resolved) return { content: [{ type: 'text', text: 'Repository not found.' }] }
 
       const stats = withSkillsStore(resolved.path, (store) => store.stats())
-      return { content: [{ type: 'text', text: JSON.stringify(stats, null, 2) }] }
+
+      // Only `active` skills are ever listed or routed. When most of the catalog
+      // is not active, every routing result silently degrades to whatever few
+      // rows survive — so say it out loud instead of leaving it to be inferred
+      // from two numbers in a JSON blob.
+      const inactive = stats.total - stats.active
+      const banner =
+        stats.total > 0 && stats.active < stats.total / 2
+          ? `⚠️  Only ${stats.active}/${stats.total} skills are ACTIVE — ${inactive} are deprecated/pending and can NOT be listed or routed.\n` +
+            `   Routing quality is degraded until they are reactivated.\n\n`
+          : ''
+
+      return { content: [{ type: 'text', text: `${banner}${JSON.stringify(stats, null, 2)}` }] }
     },
   )
 

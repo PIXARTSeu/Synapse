@@ -180,6 +180,9 @@ export class SkillsStore {
       `),
       countByType: this.db.prepare('SELECT type, COUNT(*) as count FROM skills GROUP BY type'),
       countByCategory: this.db.prepare('SELECT category, COUNT(*) as count FROM skills GROUP BY category ORDER BY count DESC'),
+      countByStatus: this.db.prepare('SELECT status, COUNT(*) as count FROM skills GROUP BY status ORDER BY count DESC'),
+      countActiveByType: this.db.prepare("SELECT type, COUNT(*) as count FROM skills WHERE status = 'active' GROUP BY type"),
+      countActiveByCategory: this.db.prepare("SELECT category, COUNT(*) as count FROM skills WHERE status = 'active' GROUP BY category ORDER BY count DESC"),
       total: this.db.prepare('SELECT COUNT(*) as count FROM skills'),
       deleteAll: this.db.prepare('DELETE FROM skills'),
       insertUsage: this.db.prepare(`
@@ -512,13 +515,31 @@ export class SkillsStore {
     return scored.slice(0, limit).map((r) => r.skill)
   }
 
+  /**
+   * Catalog statistics.
+   *
+   * IMPORTANT: `total` / `byType` / `byCategory` count rows in EVERY status,
+   * while list() and route() only ever serve status='active'. Reporting only the
+   * all-status numbers made the two APIs contradict each other — `skill_stats`
+   * happily reported a healthy 293-skill catalog while `skill_list`/`skill_route`
+   * could see 27, which is precisely how a mass-deprecation went unnoticed in
+   * production. The `active*` fields below make the servable catalog visible
+   * side by side, so any divergence is obvious at a glance.
+   */
   stats() {
     const total = (this.stmts.total.get() as any).count
     const byType = (this.stmts.countByType.all() as any[])
       .reduce((acc, r) => ({ ...acc, [r.type]: r.count }), {} as Record<string, number>)
     const byCategory = (this.stmts.countByCategory.all() as any[])
       .reduce((acc, r) => ({ ...acc, [r.category]: r.count }), {} as Record<string, number>)
-    return { total, byType, byCategory }
+    const byStatus = (this.stmts.countByStatus.all() as any[])
+      .reduce((acc, r) => ({ ...acc, [r.status]: r.count }), {} as Record<string, number>)
+    const activeByType = (this.stmts.countActiveByType.all() as any[])
+      .reduce((acc, r) => ({ ...acc, [r.type]: r.count }), {} as Record<string, number>)
+    const activeByCategory = (this.stmts.countActiveByCategory.all() as any[])
+      .reduce((acc, r) => ({ ...acc, [r.category]: r.count }), {} as Record<string, number>)
+    const active = byStatus.active ?? 0
+    return { total, active, byStatus, byType, byCategory, activeByType, activeByCategory }
   }
 
   recordUsage(name: string, action: SkillUsageAction, ctx: SkillUsageContext = {}): void {
