@@ -1,0 +1,25 @@
+{
+  "skill": "claude-api-patterns",
+  "description": "Trigger su @anthropic-ai/sdk: messages, streaming, prompt caching, tool use, vision, batch.",
+  "should_trigger": [
+    "Come uso @anthropic-ai/sdk in Next.js?",
+    "Prompt caching con cache_control",
+    "Tool use loop con Claude",
+    "Streaming SSE da Claude in Route Handler",
+    "Structured output JSON Claude API",
+    "Vision API Claude immagini base64",
+    "Batch API Anthropic per workload non realtime",
+    "Quale modello Claude scegliere: Opus vs Sonnet vs Haiku?",
+    "Rate limit Anthropic 529 Overloaded",
+    "Cache miss su prompt caching",
+    "Token cost optimization Claude",
+    "Migrazione da claude-3 a claude-4"
+  ],
+  "should_not_trigger": [
+    "OpenAI gpt-4 setup",
+    "Vercel AI SDK useChat",
+    "LangChain pipeline",
+    "Card flip CSS",
+    "Supabase Auth"
+  ]
+}

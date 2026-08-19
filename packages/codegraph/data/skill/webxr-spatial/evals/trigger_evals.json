@@ -1,0 +1,22 @@
+{
+  "skill": "webxr-spatial",
+  "description": "Trigger su WebXR (VR/AR su Quest, Vision Pro, Android), spatial UI, hand tracking, hit test.",
+  "should_trigger": [
+    "Voglio una scena VR su Quest 3 con WebXR",
+    "AR su Android con hit-test per posizionare un modello",
+    "createXRStore di @react-three/xr come si usa?",
+    "Hand tracking in WebXR R3F",
+    "enterVR non parte / fallisce silenziosamente",
+    "Teleport locomotion in VR",
+    "Spatial UI HTML in 3D dentro VR",
+    "Vision Pro WebXR passthrough",
+    "Anchor AR per oggetti persistenti",
+    "Performance critica 72Hz Quest 3"
+  ],
+  "should_not_trigger": [
+    "Setup Three.js base flat-screen",
+    "Card flip CSS",
+    "Compute shader WebGPU",
+    "Bloom in postprocessing"
+  ]
+}

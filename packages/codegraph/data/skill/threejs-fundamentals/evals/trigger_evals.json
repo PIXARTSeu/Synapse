@@ -1,0 +1,22 @@
+{
+  "skill": "threejs-fundamentals",
+  "description": "Trigger sui fondamentali di Three.js (vanilla). NO su richieste R3F-first o pure CSS.",
+  "should_trigger": [
+    "Setup base di una scena Three.js",
+    "Voglio caricare un modello GLB con Three.js",
+    "OrbitControls non funziona, perché?",
+    "Come faccio raycast click su una mesh?",
+    "Three.js mi mostra schermo nero",
+    "Differenza fra MeshStandardMaterial e MeshPhysicalMaterial",
+    "Come imposto le shadow in Three.js?",
+    "Resize handler per WebGLRenderer",
+    "Three.js i colori sembrano slavati",
+    "Dispose di geometrie e materiali in Three.js"
+  ],
+  "should_not_trigger": [
+    "Voglio fare una card flip in CSS",
+    "useFrame in React Three Fiber",
+    "Scrivi uno shader GLSL custom",
+    "Aggiungi physics Rapier alla mia scena R3F"
+  ]
+}

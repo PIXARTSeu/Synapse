@@ -1,0 +1,22 @@
+{
+  "skill": "glsl-shaders",
+  "description": "Trigger su scrittura/debug di shader GLSL custom (vertex/fragment) in Three.js o R3F.",
+  "should_trigger": [
+    "Scrivi uno shader fragment per un gradient animato",
+    "Vertex displacement con noise in Three.js",
+    "Voglio implementare un fresnel rim light glow",
+    "Come uso shaderMaterial di drei?",
+    "Shader compila ma renderizza nero, perché?",
+    "Port di uno Shadertoy in React Three Fiber",
+    "Raymarching primer GLSL",
+    "Snoise / simplex noise in GLSL",
+    "Caricare file .glsl con webpack/Next.js",
+    "uniform uTime non si aggiorna"
+  ],
+  "should_not_trigger": [
+    "Setup base Three.js",
+    "Card flip in CSS",
+    "Voglio caricare un GLTF",
+    "Compressione DRACO"
+  ]
+}

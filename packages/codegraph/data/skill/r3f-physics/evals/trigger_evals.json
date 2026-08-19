@@ -1,0 +1,22 @@
+{
+  "skill": "r3f-physics",
+  "description": "Trigger su physics in R3F con @react-three/rapier.",
+  "should_trigger": [
+    "Aggiungi gravità e collisioni alla mia scena R3F",
+    "RigidBody dynamic vs kinematic vs fixed",
+    "Drag and drop con physics in R3F",
+    "Voglio un ragdoll con joint in Rapier",
+    "Character controller R3F",
+    "Trimesh non collide quando il body è dinamico",
+    "Bodies passano attraverso il floor",
+    "Vibrazione/jitter quando stacking di cubi",
+    "applyImpulse su un RigidBody quando l'utente clicca",
+    "Raycast per ground detection"
+  ],
+  "should_not_trigger": [
+    "Card flip CSS",
+    "Setup base Three.js",
+    "Shader fragment GLSL",
+    "Carica GLB con DRACO"
+  ]
+}

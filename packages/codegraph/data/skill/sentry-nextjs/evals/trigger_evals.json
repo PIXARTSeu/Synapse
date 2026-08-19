@@ -1,0 +1,25 @@
+{
+  "skill": "sentry-nextjs",
+  "description": "Trigger su Sentry per Next.js 15: errors, performance, replay, source maps.",
+  "should_trigger": [
+    "Setup Sentry in Next.js 15",
+    "Source maps Sentry upload non funziona",
+    "Wrappa Server Action con Sentry instrumentation",
+    "Session Replay privacy mask",
+    "Performance tracing custom span Sentry",
+    "Error boundary error.tsx Sentry capture",
+    "ignoreErrors filtri ResizeObserver",
+    "Source map minified stack trace",
+    "Edge runtime Sentry config",
+    "Sentry alert su frequenza errori",
+    "User context setUser Sentry",
+    "tunnelRoute bypass ad blocker"
+  ],
+  "should_not_trigger": [
+    "Setup PostHog analytics",
+    "Plausible setup",
+    "Card flip CSS",
+    "Three.js scene",
+    "Datadog APM"
+  ]
+}

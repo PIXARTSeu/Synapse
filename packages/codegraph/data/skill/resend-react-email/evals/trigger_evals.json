@@ -1,0 +1,25 @@
+{
+  "skill": "resend-react-email",
+  "description": "Trigger su Resend + React Email per transactional in Next.js.",
+  "should_trigger": [
+    "Setup Resend e React Email in Next.js",
+    "Inviare email transazionale con template React",
+    "Domain verification Resend",
+    "React Email Studio preview locale",
+    "Webhook Resend bounce e complaint",
+    "Audience broadcast newsletter con Resend",
+    "Idempotency key Resend send",
+    "Attachment PDF con Resend",
+    "Schedule email send Resend",
+    "Plaintext alternative React Email",
+    "Tailwind in React Email component",
+    "Differenza Resend vs Nodemailer"
+  ],
+  "should_not_trigger": [
+    "Nodemailer SMTP setup",
+    "Mailchimp campaign",
+    "SendGrid Marketing",
+    "Card flip CSS",
+    "Stripe webhook"
+  ]
+}

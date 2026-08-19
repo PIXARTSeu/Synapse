@@ -1,0 +1,25 @@
+{
+  "skill": "vitest-next-conventions",
+  "description": "Trigger su Vitest in Next.js 15: setup, mocks, RSC, Server Actions, MSW, CI.",
+  "should_trigger": [
+    "Setup Vitest in Next.js 15 App Router",
+    "Mockare next/navigation in test",
+    "Test di un Server Component asincrono",
+    "Testare Server Action con FormData",
+    "MSW setup per network mock in test",
+    "vitest projects per separare client/server",
+    "ReferenceError: Request is not defined nei test",
+    "cookies() should be awaited error",
+    "Coverage Vitest con v8",
+    "Test passa locale ma fallisce in CI",
+    "Path alias @/ non risolto in Vitest",
+    "Testing Route Handler /api/contact"
+  ],
+  "should_not_trigger": [
+    "Setup Playwright per E2E",
+    "Jest configuration",
+    "Cypress test",
+    "Card flip CSS",
+    "Three.js scene"
+  ]
+}

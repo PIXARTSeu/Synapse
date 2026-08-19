@@ -1,0 +1,25 @@
+{
+  "skill": "turborepo-monorepo",
+  "description": "Trigger su Turborepo + pnpm workspaces monorepo per Next.js apps + shared packages.",
+  "should_trigger": [
+    "Setup monorepo Turborepo da zero",
+    "Sharing UI components fra multiple Next.js apps",
+    "transpilePackages internal pkg in Next.js",
+    "turbo.json pipeline dependsOn outputs",
+    "Remote cache Turborepo Vercel o self-hosted",
+    "Cache miss ratio basso come migliorare",
+    "Filter --filter='[main]' build affected packages",
+    "Deploy Vercel per app in monorepo",
+    "Cannot find module @repo/ui",
+    "Migrare 9 progetti separati in monorepo",
+    "Internal pkg changes non si vedono in dev",
+    "Cyclic dependency package monorepo"
+  ],
+  "should_not_trigger": [
+    "Nx setup polyglot",
+    "Lerna versioning",
+    "Card flip CSS",
+    "Single Next.js app",
+    "Stripe webhook"
+  ]
+}

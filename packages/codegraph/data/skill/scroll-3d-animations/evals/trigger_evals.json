@@ -1,0 +1,22 @@
+{
+  "skill": "scroll-3d-animations",
+  "description": "Test attivazione su richieste scroll-driven/parallax/pinned animation. NO su animazioni hover-only o fisiche.",
+  "should_trigger": [
+    "Voglio un parallax effect quando si scrolla",
+    "Come implemento scroll-trigger con GSAP?",
+    "Voglio una sezione sticky con storytelling al scroll",
+    "Reveal-on-scroll dei miei componenti React",
+    "Posso fare scroll animations senza JavaScript?",
+    "Camera Three.js che si muove con lo scroll",
+    "Horizontal scroll su pagina verticale",
+    "Lenis smooth scroll non funziona con ScrollTrigger",
+    "Progress bar in fondo alla pagina che traccia lo scroll",
+    "useScroll di Framer Motion mi torna sempre 0"
+  ],
+  "should_not_trigger": [
+    "Card flip al hover",
+    "Animazione di entrata di un modal",
+    "Voglio shadow al click su un bottone",
+    "Spring physics su drag di un elemento"
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "skill": "css-3d-transforms",
+  "description": "Test che la skill si attivi su richieste di CSS 3D puro (transform, perspective, flip, cube, parallax CSS) e NON su richieste WebGL/Three.js",
+  "should_trigger": [
+    "Voglio fare una card che si gira al hover con CSS",
+    "Come faccio un cubo 3D in CSS senza Three.js?",
+    "Come funziona perspective in CSS?",
+    "Implementa un coverflow carousel solo con CSS",
+    "Voglio un effetto tilt sul mouse senza librerie",
+    "Card flip senza JavaScript",
+    "preserve-3d non funziona, perché?",
+    "Parallax con perspective in CSS"
+  ],
+  "should_not_trigger": [
+    "Crea una scena Three.js con un cubo rotante",
+    "Voglio caricare un modello GLTF in React",
+    "Come scrivo uno shader GLSL?",
+    "Aggiungi post-processing bloom alla scena R3F"
+  ]
+}

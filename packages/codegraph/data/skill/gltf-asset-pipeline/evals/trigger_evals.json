@@ -1,0 +1,22 @@
+{
+  "skill": "gltf-asset-pipeline",
+  "description": "Trigger su preparazione/ottimizzazione asset 3D glTF/GLB per il web.",
+  "should_trigger": [
+    "Il mio .glb è troppo pesante, come lo ottimizzo?",
+    "Differenza fra Draco e Meshopt",
+    "Esportare da Blender a glTF",
+    "Come uso gltf-transform per comprimere texture KTX2?",
+    "gltfjsx genera un componente TypeScript",
+    "Cache headers per modelli 3D su Next.js",
+    "Texture pink/missing quando carico il GLB",
+    "Setup KTX2Loader e MeshoptDecoder",
+    "Preload hero model in Next.js layout",
+    "Comprimere texture color con ETC1S e normal con UASTC"
+  ],
+  "should_not_trigger": [
+    "Setup base scena Three.js",
+    "Scrivi uno shader GLSL",
+    "Card flip CSS",
+    "Scroll-driven animation"
+  ]
+}
