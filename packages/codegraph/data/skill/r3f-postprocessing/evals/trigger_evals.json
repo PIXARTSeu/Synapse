@@ -1,0 +1,22 @@
+{
+  "skill": "r3f-postprocessing",
+  "description": "Trigger su post-processing in R3F: bloom, DOF, SSAO, color grading.",
+  "should_trigger": [
+    "Voglio aggiungere bloom alla mia scena R3F",
+    "Come faccio depth of field in React Three Fiber?",
+    "Selective bloom solo sui mesh emissive",
+    "SSAO sembra avere banding",
+    "Outline hover effect su mesh R3F",
+    "Cinematic color grading con tonemap ACES",
+    "Bloom non si vede sui colori brillanti",
+    "Custom effect post-processing wrapEffect",
+    "PerformanceMonitor per disabilitare effetti su mobile",
+    "Chromatic aberration sui bordi"
+  ],
+  "should_not_trigger": [
+    "Scrivi uno shader GLSL per un gradient",
+    "Setup base Three.js",
+    "Carica un GLB con Draco",
+    "Scroll trigger con GSAP"
+  ]
+}

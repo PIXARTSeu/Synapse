@@ -1,0 +1,22 @@
+{
+  "skill": "webgpu-tsl",
+  "description": "Trigger su WebGPU + Three.js TSL (Three Shading Language) e compute shaders.",
+  "should_trigger": [
+    "Setup base WebGPU con Three.js",
+    "Cosa è TSL Three Shading Language?",
+    "Voglio scrivere un compute shader nel browser",
+    "MeshStandardNodeMaterial come si usa?",
+    "Fallback WebGL2 quando WebGPU non c'è",
+    "WebGPURenderer.init() async",
+    "Storage buffer per particelle in Three.js",
+    "wgslFn vs glslFn per shader nodes",
+    "Vertex displacement con TSL",
+    "Pre-warm shader compile async"
+  ],
+  "should_not_trigger": [
+    "Setup Three.js WebGL base",
+    "Card flip CSS",
+    "Carica GLB con Draco",
+    "Bloom in R3F"
+  ]
+}

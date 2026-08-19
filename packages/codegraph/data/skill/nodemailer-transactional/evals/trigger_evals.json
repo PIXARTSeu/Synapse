@@ -1,0 +1,24 @@
+{
+  "skill": "nodemailer-transactional",
+  "description": "Trigger su Nodemailer SMTP per email transazionali in Next.js + deliverability.",
+  "should_trigger": [
+    "Come invio email transazionale con Nodemailer in Next.js?",
+    "Form contatti che manda email al lead",
+    "Le mie email vanno in spam, come sistemo?",
+    "SPF DKIM DMARC setup",
+    "Singleton transporter Nodemailer pattern",
+    "Attachment PDF con Nodemailer",
+    "EAUTH Invalid login Nodemailer",
+    "Inviare email da Server Action Next.js",
+    "Connection timeout sending mail",
+    "Postmark vs SendGrid vs Resend per SMTP",
+    "Email confirmation password reset custom"
+  ],
+  "should_not_trigger": [
+    "Resend + React Email setup",
+    "Marketing email campaign con Mailchimp",
+    "Setup Three.js base",
+    "Card flip CSS",
+    "Supabase Auth middleware"
+  ]
+}

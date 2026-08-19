@@ -1,0 +1,25 @@
+{
+  "skill": "framer-motion-advanced",
+  "description": "Trigger su Motion/Framer Motion avanzato: layout, AnimatePresence, drag, variants, scroll.",
+  "should_trigger": [
+    "layoutId per shared element transition",
+    "AnimatePresence exit non funziona",
+    "Reorder list drag and drop con Framer Motion",
+    "useScroll useTransform per parallax",
+    "useMotionValue useSpring per cursor smooth",
+    "Variants con staggerChildren",
+    "whileHover whileTap micro-interaction",
+    "Reduced motion preference accessibility",
+    "LazyMotion per ridurre bundle size",
+    "Hydration mismatch motion component Next.js",
+    "Layout animation glitch jump",
+    "Migrazione da framer-motion a motion"
+  ],
+  "should_not_trigger": [
+    "GSAP ScrollTrigger setup",
+    "CSS keyframes animation",
+    "Three.js mesh animation",
+    "Card flip CSS 3D",
+    "React Spring usage"
+  ]
+}

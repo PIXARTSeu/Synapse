@@ -1,0 +1,24 @@
+{
+  "skill": "rhf-zod-server-actions",
+  "description": "Trigger su form Next.js 15 con react-hook-form + Zod + Server Actions + useActionState.",
+  "should_trigger": [
+    "Form con react-hook-form e Zod resolver in Next.js 15",
+    "useActionState come si usa?",
+    "Server Action contact form con validation",
+    "Progressive enhancement form senza JavaScript",
+    "useFormStatus per pending button",
+    "useOptimistic per update istantaneo",
+    "File upload via Server Action",
+    "Errori Zod field-level e global insieme",
+    "Multi-step wizard form Next.js",
+    "redirect() in Server Action throw NEXT_REDIRECT",
+    "Schema condiviso client server con Zod"
+  ],
+  "should_not_trigger": [
+    "Form Vue 3 con composition API",
+    "React Native form",
+    "Card flip CSS",
+    "Three.js scene setup",
+    "Supabase RLS policy"
+  ]
+}

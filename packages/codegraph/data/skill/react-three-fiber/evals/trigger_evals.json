@@ -1,0 +1,22 @@
+{
+  "skill": "react-three-fiber",
+  "description": "Trigger su R3F: Canvas, useFrame, drei, integrazione React/Next.js 3D. NO su vanilla Three.js o CSS 3D.",
+  "should_trigger": [
+    "Setup R3F in un progetto Next.js",
+    "useFrame mi sta facendo re-render continui",
+    "Come uso useGLTF di drei?",
+    "Canvas di react-three-fiber non si renderizza in Next.js (window not defined)",
+    "Voglio HTML overlay agganciato a una mesh in R3F",
+    "Multipli viewport in R3F senza creare più WebGL context",
+    "PerformanceMonitor per ridurre DPR su mobile",
+    "Zustand per state inside Canvas",
+    "Click handler su mesh in React Three Fiber",
+    "Adaptive quality scene R3F"
+  ],
+  "should_not_trigger": [
+    "Setup base Three.js vanilla",
+    "Card flip CSS 3D",
+    "Scroll-driven animation con Framer Motion",
+    "Compressione glTF con Draco"
+  ]
+}

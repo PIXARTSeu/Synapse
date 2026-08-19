@@ -46,6 +46,37 @@ node dist/cli.js import-skills /data --full
 absent from the bundle, and **never** touches `System` / `Lifecycle` categories
 or `pending` drafts.
 
+**Blast-radius guard.** `--full` refuses to run when the prune would deprecate
+more than 25% of the eligible active catalog (and at least 10 skills). A run that
+discovers only a slice of the bundle — wrong path, half-mounted volume, missing
+`.opencode`/`.agents` symlinks — is far more likely a misconfiguration than an
+intentional mass removal, so it is stopped and reported rather than applied.
+Verify the path first; `--force` overrides once you are sure.
+
+### 4. Recovering from a bad prune → `--reactivate`
+
+If a `--full` run deprecated skills it should not have, restore them with:
+
+```bash
+node dist/cli.js import-skills /data --reactivate
+```
+
+This is the exact inverse of `--full`: every **deprecated** skill that IS present
+in the discovered bundle goes back to `active`. Skills genuinely retired (files
+deleted) stay deprecated because they never appear in the discovery set, and
+`pending` rows are untouched — those are security-gate quarantines awaiting human
+review, not prune casualties.
+
+Note that a plain redeploy does **not** repair this: the boot import passes
+`status: NULL`, and the upsert deliberately keeps the existing status rather than
+resurrecting deprecated rows. Recovery is always an explicit step.
+
+**Symptom to recognise.** Only `active` skills are listed or routed, so a bad
+prune shows up as `skill_route` returning plausible-but-irrelevant skills for
+every query — whatever handful survived — while `skill_read` still works fine for
+the missing ones. `skill_stats` prints an explicit warning banner when the active
+catalog drops below half the total; compare its `active` and `total` fields.
+
 ## Telemetry reality (usage / apply signal)
 
 `route()` ranking derives ~22% of its score from `skill_usage` (recency +

@@ -1,0 +1,25 @@
+{
+  "skill": "vercel-ai-sdk-streaming",
+  "description": "Trigger su Vercel AI SDK 5: streamText, useChat, generateObject, tool calling, agents.",
+  "should_trigger": [
+    "Setup Vercel AI SDK con Claude provider",
+    "useChat per chat UI streaming",
+    "generateObject con Zod schema",
+    "Tool calling con AI SDK e maxSteps",
+    "Stream da Server Action con createStreamableValue",
+    "Switch provider Anthropic OpenAI Google",
+    "Provider middleware logging AI SDK",
+    "Stream cuts off mid-message Vercel timeout",
+    "useObject streaming structured output",
+    "RAG con AI SDK system prompt",
+    "Tool description model non chiama",
+    "Quando usare AI SDK vs raw Anthropic SDK"
+  ],
+  "should_not_trigger": [
+    "Raw Anthropic SDK prompt caching",
+    "OpenAI Assistants API",
+    "LangChain pipeline",
+    "Card flip CSS",
+    "Stripe webhook"
+  ]
+}

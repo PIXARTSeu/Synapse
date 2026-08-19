@@ -1,0 +1,26 @@
+{
+  "skill": "supabase-auth-ssr",
+  "description": "Trigger su Supabase Auth + @supabase/ssr in Next.js 15 App Router.",
+  "should_trigger": [
+    "Setup Supabase Auth in Next.js 15",
+    "Middleware Supabase per refresh sessione",
+    "createServerClient vs createBrowserClient",
+    "Magic link login con Supabase",
+    "OAuth Google callback Supabase Next.js",
+    "RLS policy non funziona da Server Component",
+    "Auth session missing dopo login",
+    "Session scade dopo 1 ora silenziosamente",
+    "Server Action signInWithPassword Supabase",
+    "Reset password flow Supabase",
+    "Generated types Supabase database",
+    "Service role key per admin operations",
+    "Differenza getUser vs getSession"
+  ],
+  "should_not_trigger": [
+    "Setup NextAuth o Auth.js",
+    "Clerk integration",
+    "Prisma + Postgres setup",
+    "Card flip CSS 3D",
+    "Three.js fundamentals"
+  ]
+}

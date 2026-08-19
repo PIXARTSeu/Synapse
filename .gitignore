@@ -94,3 +94,6 @@ node_modules/
 
 # Git worktrees
 .worktrees/
+
+# node-gyp build artifacts (better-sqlite3 native rebuilds)
+/build/

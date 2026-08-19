@@ -1,0 +1,22 @@
+{
+  "skill": "spline-rive-web",
+  "description": "Trigger su integrazione Spline / Rive nel web (designer-driven no-code).",
+  "should_trigger": [
+    "Come integro una scena Spline in Next.js?",
+    "Carica un file .riv di Rive in React",
+    "Rive state machine input non si trova",
+    "Spline scene invisible / pagina vuota",
+    "useStateMachineInput per hover button Rive",
+    "Performance Spline lenta da caricare",
+    "Differenza fra Spline e Rive",
+    "Rive WebGL2 runtime vs canvas 2D",
+    "Esportare scena Spline a glTF per R3F",
+    "Controllare variabile Spline da React"
+  ],
+  "should_not_trigger": [
+    "Setup Three.js vanilla",
+    "Card flip CSS",
+    "Compute shader WebGPU",
+    "Scrivi uno shader GLSL"
+  ]
+}

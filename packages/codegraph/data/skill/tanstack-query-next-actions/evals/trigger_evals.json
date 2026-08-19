@@ -1,0 +1,25 @@
+{
+  "skill": "tanstack-query-next-actions",
+  "description": "Trigger su TanStack Query v5 in Next.js 15 con prefetch + HydrationBoundary + mutations.",
+  "should_trigger": [
+    "Setup TanStack Query in Next.js 15 App Router",
+    "Prefetch in Server Component con HydrationBoundary",
+    "useMutation con optimistic update",
+    "useInfiniteQuery con cursor pagination",
+    "useSuspenseQuery integrazione Suspense",
+    "queryKey factory pattern type-safe",
+    "Invalidation strategy mutations",
+    "Server Action come mutationFn",
+    "Polling refetchInterval TanStack",
+    "Dependent query enabled",
+    "QueryClient per-request vs singleton",
+    "Hydration mismatch server prefetched"
+  ],
+  "should_not_trigger": [
+    "SWR setup",
+    "Zustand global state",
+    "Setup Three.js",
+    "Card flip CSS",
+    "Server Component without client interaction"
+  ]
+}

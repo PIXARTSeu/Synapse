@@ -49,7 +49,11 @@ const CATEGORY_MAP: Record<string, string> = {
   'webgpu-tsl': 'Frontend', 'webxr-spatial': 'Frontend',
 
   // Mobile
+  // The two 'Expo UI …' title-case keys are the pre-kebab-case names these two
+  // skills used to self-report; kept so already-imported rows keep their Mobile
+  // category instead of silently falling back to 'Other'.
   'Expo UI Jetpack Compose': 'Mobile', 'Expo UI SwiftUI': 'Mobile',
+  'expo-ui-jetpack-compose': 'Mobile', 'expo-ui-swiftui': 'Mobile',
   'building-native-ui': 'Mobile', 'expo-api-routes': 'Mobile',
   'expo-cicd-workflows': 'Mobile', 'expo-deployment': 'Mobile',
   'expo-dev-client': 'Mobile', 'expo-module': 'Mobile',
@@ -175,7 +179,15 @@ export function detectCategory(name: string): string {
 }
 
 function parseFrontmatter(content: string): { name?: string; description?: string; [key: string]: any } {
-  const match = content.match(/^---\n([\s\S]*?)\n---/)
+  // Normalise line endings first. Every pattern below is anchored on \n, so a
+  // CRLF file (any Windows-authored skill) failed the opening `^---\n` match and
+  // silently lost its ENTIRE frontmatter — the skill then fell back to its
+  // directory name and a placeholder "Domain skill: <name>" description, which
+  // strips the trigger keywords skill_route matches on and makes it effectively
+  // unroutable. Silent, and invisible unless you diff the DB against the file.
+  const normalised = content.replace(/\r\n/g, '\n')
+
+  const match = normalised.match(/^---\n([\s\S]*?)\n---/)
   if (!match) return {}
 
   const yaml = match[1]
@@ -227,14 +239,52 @@ export interface ImportSkillsOptions {
    * Protections: never touches System/Lifecycle categories, and only flips
    * `active` rows (leaves `pending` drafts and already-`deprecated` rows alone).
    * Reversible: sets status='deprecated', it does not delete.
+   *
+   * Additionally guarded by PRUNE_MAX_FRACTION — a prune that would wipe most of
+   * the catalog is refused unless `force` is set.
    */
   prune?: boolean
+
+  /**
+   * Override the PRUNE_MAX_FRACTION blast-radius guard. Only meaningful together
+   * with `prune`. Use when a large removal genuinely is intended and the bundle
+   * path has been verified — never as a reflex to make a refused prune go away.
+   */
+  force?: boolean
+
+  /**
+   * Recovery mode — the exact inverse of `prune`. Flip back to `active` any
+   * `deprecated` skill that IS present in the discovered bundle.
+   *
+   * This undoes an erroneous `--full` run (the failure the PRUNE_MAX_FRACTION
+   * guard now prevents) without resurrecting anything else: a skill genuinely
+   * retired by deleting its files stays deprecated, because it will not appear
+   * in the discovery set. `pending` rows are never touched — those are
+   * security-gate quarantines awaiting human review, not prune casualties.
+   */
+  reactivate?: boolean
 }
+
+/**
+ * Maximum share of the eligible ACTIVE catalog a single `--full` prune may
+ * deprecate before it is treated as a misconfiguration rather than an intent.
+ * Sized so ordinary curation passes (removing a handful of retired skills) run
+ * unimpeded, while a wrong-path run that would gut the catalog is stopped.
+ */
+const PRUNE_MAX_FRACTION = 0.25
+
+/**
+ * Absolute floor below which the fraction guard does not apply. In a small
+ * catalog a share is meaningless — dropping 1 of 2 skills is a legitimate 50%
+ * prune — so the guard only engages once enough rows are at stake for a wrong
+ * path to be the likelier explanation than deliberate curation.
+ */
+const PRUNE_GUARD_MIN_SKILLS = 10
 
 export async function importSkills(
   workspacePath: string,
   opts: ImportSkillsOptions = {},
-): Promise<{ skills: number; agents: number; commands: number; pruned: number; blocked: number }> {
+): Promise<{ skills: number; agents: number; commands: number; pruned: number; reactivated: number; blocked: number }> {
   const db = openDb(workspacePath)
   const store = new SkillsStore(db)
 
@@ -364,13 +414,43 @@ export async function importSkills(
     })
   }
 
+  // Collapse same-name skills discovered in more than one zone before they reach
+  // the gate and the DB. A name can legitimately appear in both `.claude/skill/`
+  // (domain) and `.agents/skills/` (lifecycle/process) — the bundle ships ~29 such
+  // pairs — and upsertBatch would otherwise write the row twice, so whichever copy
+  // happened to be walked last silently decided the skill's type and category.
+  //
+  // Last-wins is kept (zones are walked domain → lifecycle/process, so the
+  // `.agents/skills/` copy is canonical) because that is the precedence the
+  // existing catalog was built with; changing it would silently retype live
+  // skills. The point here is that the collapse is now explicit and reported
+  // rather than an accident of iteration order.
+  const deduped: Skill[] = []
+  const indexByName = new Map<string, number>()
+  const shadowed: string[] = []
+  for (const skill of skills) {
+    const existing = indexByName.get(skill.name)
+    if (existing === undefined) {
+      indexByName.set(skill.name, deduped.length)
+      deduped.push(skill)
+    } else {
+      if (deduped[existing].type !== skill.type) shadowed.push(`${skill.name} (${deduped[existing].type} → ${skill.type})`)
+      deduped[existing] = skill
+    }
+  }
+  if (shadowed.length > 0) {
+    console.warn(
+      `[import-skills] ${shadowed.length} skill(s) found in multiple zones — kept the last copy walked: ${shadowed.join(', ')}`,
+    )
+  }
+
   // Security gate: static-only scan of every skill's content before it lands in
   // the DB (Task 7). BLOCK verdicts are quarantined to status='pending' — see
   // ./skill-gate.ts for the full policy. Static-only here (no `llm` opt passed):
   // this is a bulk import path with no per-user credentials to resolve
   // synchronously — deeper LLM-judge scans are exposed on-demand via the
   // skill_scan MCP tool instead (Task 8), not run on every ingestion write.
-  const gated = await Promise.all(skills.map((s) => applyGate(s)))
+  const gated = await Promise.all(deduped.map((s) => applyGate(s)))
   const blocked = gated.filter((s) => s.riskRecommendation === 'BLOCK').length
   if (blocked > 0) {
     // No silent gating: surface the count so an operator watching import logs
@@ -381,21 +461,58 @@ export async function importSkills(
   // Batch insert
   store.upsertBatch(gated)
 
+  // Recovery: restore skills that a bad prune deprecated but the bundle still has.
+  let reactivated = 0
+  if (opts.reactivate) {
+    const names = deduped.map((s) => s.name)
+    const upd = db.prepare(`UPDATE skills SET status = 'active', updated_at = ? WHERE name = ? AND status = 'deprecated'`)
+    const nowIso = new Date().toISOString()
+    const tx = db.transaction((ns: string[]) => {
+      let n = 0
+      for (const name of ns) n += upd.run(nowIso, name).changes
+      return n
+    })
+    reactivated = tx(names)
+    console.warn(`[import-skills] --reactivate: restored ${reactivated} deprecated skill(s) present in the bundle back to active.`)
+  }
+
   // Optional full-sync: deprecate active skills that vanished from the bundle.
   let pruned = 0
-  if (opts.prune && skills.length === 0) {
-    // Safety guard: an empty discovered set almost always means the bundle path
-    // was wrong (e.g. `import-skills /data` without the .opencode/.agents symlinks
-    // that entrypoint.sh sets up), NOT an intent to deprecate the entire catalog.
-    // Refuse to prune — otherwise a misconfigured path silently wipes every skill.
-    console.warn('[import-skills] --full: 0 skills discovered — skipping prune to avoid deprecating the whole catalog. Check the workspace path.')
-  } else if (opts.prune) {
-    const discovered = new Set(skills.map((s) => s.name))
+  if (opts.prune) {
+    const discovered = new Set(deduped.map((s) => s.name))
     const activeNames = (db
       .prepare(`SELECT name FROM skills WHERE status = 'active' AND category NOT IN ('System','Lifecycle')`)
       .all() as { name: string }[]).map((r) => r.name)
     const toPrune = activeNames.filter((n) => !discovered.has(n))
-    if (toPrune.length > 0) {
+
+    // Safety guard: a discovery set that is empty — or drastically smaller than
+    // the catalog it is about to prune — almost always means the bundle path was
+    // wrong (e.g. `import-skills /data` without the .opencode/.agents symlinks
+    // that entrypoint.sh sets up, or a partially-populated bundle), NOT an intent
+    // to deprecate the whole catalog.
+    //
+    // The old guard only refused on `skills.length === 0`, which let a
+    // catastrophically PARTIAL discovery through: a run that found 17 of ~293
+    // skills sailed past the check and soft-deleted the other ~266, taking
+    // production routing down to the handful of survivors (System/Lifecycle are
+    // exempt above, which is exactly the fingerprint that incident left behind).
+    // Refuse whenever the prune would remove more than PRUNE_MAX_FRACTION of the
+    // eligible active catalog; `force` is the deliberate, explicit override.
+    const eligible = activeNames.length
+    const fraction = eligible === 0 ? 0 : toPrune.length / eligible
+
+    if (deduped.length === 0) {
+      console.warn(
+        '[import-skills] --full: 0 skills discovered — skipping prune to avoid deprecating the whole catalog. Check the workspace path.',
+      )
+    } else if (toPrune.length >= PRUNE_GUARD_MIN_SKILLS && fraction > PRUNE_MAX_FRACTION && !opts.force) {
+      console.warn(
+        `[import-skills] --full: refusing to prune ${toPrune.length}/${eligible} active skills ` +
+          `(${Math.round(fraction * 100)}% > ${Math.round(PRUNE_MAX_FRACTION * 100)}% limit) from a discovery set of ` +
+          `${deduped.length}. This looks like a wrong or partial bundle path, not an intentional catalog removal. ` +
+          `Verify the path, then re-run with --force if the removal really is intended.`,
+      )
+    } else if (toPrune.length > 0) {
       const nowIso = new Date().toISOString()
       const upd = db.prepare(`UPDATE skills SET status = 'deprecated', updated_at = ? WHERE name = ?`)
       const tx = db.transaction((names: string[]) => { for (const n of names) upd.run(nowIso, n) })
@@ -406,8 +523,8 @@ export async function importSkills(
 
   closeDb(db)
 
-  const domainCount = skills.filter((s) => s.type === 'domain').length
-  return { skills: domainCount, agents: agentCount, commands: commandCount, pruned, blocked }
+  const domainCount = deduped.filter((s) => s.type === 'domain').length
+  return { skills: domainCount, agents: agentCount, commands: commandCount, pruned, reactivated, blocked }
 }
 
 function isLifecycleSkill(name: string): boolean {

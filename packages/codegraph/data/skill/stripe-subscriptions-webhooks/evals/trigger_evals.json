@@ -1,0 +1,25 @@
+{
+  "skill": "stripe-subscriptions-webhooks",
+  "description": "Trigger su Stripe subscriptions, checkout, customer portal, webhooks in Next.js.",
+  "should_trigger": [
+    "Setup Stripe Checkout per subscription",
+    "Webhook signature verification failed",
+    "Customer Portal Stripe Next.js",
+    "Sync subscription da Stripe a DB Supabase",
+    "Stripe Tax automatic IVA Italia",
+    "Metered billing Stripe per API SaaS",
+    "Local dev webhook con Stripe CLI",
+    "Idempotency webhook handler",
+    "Trial period Stripe checkout",
+    "Multi-currency presentment Stripe",
+    "Test card 3DS authentication",
+    "Customer charged ma webhook non arrivato"
+  ],
+  "should_not_trigger": [
+    "Lemon Squeezy integration",
+    "PayPal one-time payment",
+    "Shopify storefront",
+    "Card flip CSS",
+    "Supabase Auth setup"
+  ]
+}
