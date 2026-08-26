@@ -135,6 +135,8 @@ const CATEGORY_MAP: Record<string, string> = {
   // CMS & content pipelines
   'agent-browser': 'CMS', cms: 'CMS', payload: 'CMS',
   'salesforce-developer': 'CMS', scraping: 'CMS', 'shopify-expert': 'CMS',
+  'shopify-apps': 'CMS', 'shopify-core': 'CMS', 'shopify-functions': 'CMS',
+  'shopify-storefront': 'CMS', 'shopify-themes': 'CMS',
   'website-cloning': 'CMS', 'wordpress-pro': 'CMS',
 
   // Process (workflows, code review, meta-skills)
