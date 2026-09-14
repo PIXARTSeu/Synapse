@@ -62,3 +62,4 @@ Coordini internamente (lancia come subagent):
 2. **Max 3 domande** — Se mancano info, chiedi solo le critiche
 3. **Output azionabile** — Il brief deve essere immediatamente usabile da @builder
 4. **Parallela gli agenti** — Lancia ux-designer, growth-architect etc. in parallelo
+5. **Lavoro tecnico** — Per feature, refactor e architettura raccogli e sintetizza informazioni per la sessione principale: il dialogo `superpowers:brainstorming`, lo spec e il piano (`superpowers:writing-plans`) li scrive la sessione principale, non @planner

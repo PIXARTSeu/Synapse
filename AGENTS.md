@@ -31,6 +31,8 @@ Sistema multi-agente per sviluppo frontend professionale e marketing digitale.
 | "n8n", "workflow", "automazione" | `AUTOMATION` | MEDIO | NO |
 | "gdpr", "privacy", "cookie policy", "legal" | `COMPLIANCE` | MEDIO | NO |
 
+> Fase 0 sceglie il **workflow** in base al tipo di richiesta. Per il lavoro di codice, `superpowers:brainstorming` classifica poi **quanto processo** serve (spike / bounded / architectural): le due classificazioni si sommano, non si sostituiscono.
+
 ### Fase 1: Estrai Info dal Messaggio (silenzioso)
 
 Scansiona ed estrai: **target**, **prodotto**, **goal**, **esiste** (sito/brand/repo?), **tono**, **vincoli**.
@@ -59,6 +61,8 @@ BRIEF COMPILATO:
 Confermo e parto?
 ```
 
+Per task tecnici il brief confermato è l'input di `superpowers:brainstorming`, che non richiede ciò che il brief contiene già.
+
 ### Fase 4: Esecuzione
 
 | Tipo | Workflow |
@@ -66,16 +70,50 @@ Confermo e parto?
 | NUOVO_SITO | `/frontend` |
 | MARKETING | `/marketing` |
 | SETUP_PROGETTO | subagent project-architect |
-| COMPONENTE | subagent component-builder |
+| COMPONENTE | `superpowers:brainstorming` → `superpowers:subagent-driven-development` (implementer con prompt component-builder) |
 | AUDIT | `/audit` |
-| FIX | risolvi direttamente |
+| FIX | `superpowers:systematic-debugging` |
 | VIDEO | `/video` |
 | CMS | `/cms-setup` |
 | DESIGN | subagent ui-designer |
 | CLIENT | `/new-client` |
 | COMPLIANCE | `/gdpr-audit` o `/generate-legal` |
 | AUTOMATION | subagent n8n-workflow |
-| REFACTOR | codegraph_impact → poi procedi |
+| REFACTOR | codegraph_impact → `superpowers:brainstorming` → `superpowers:subagent-driven-development` |
+
+---
+
+## Workflow tecnico (Superpowers)
+
+Per tutto il lavoro di codice (FIX, COMPONENTE, REFACTOR, feature) il *come* è governato dalle skill del plugin **superpowers**, caricate con il tool `Skill` come `superpowers:<skill>`. Design: `docs/superpowers/specs/2026-09-14-superpowers-integration-design.md`.
+
+```
+brainstorming ─┬─ spike ─────────► risposta / raccomandazione
+               ├─ bounded ───────► design in chat → implementazione (TDD)
+               └─ architectural ─► spec → writing-plans → subagent-driven-development
+                                                                   │
+FIX → systematic-debugging ────────────────────────────────────────┤
+                                                                   ▼
+        verification-before-completion → requesting-code-review → finishing-a-development-branch
+```
+
+**Il flusso gira nella sessione principale.** brainstorming è un dialogo con l'utente, e i subagent implementer/reviewer non possono lanciare altri subagent. @planner, @builder e gli specialisti sono prompt SkillBrain (`agent_read`) che la sessione principale usa, non orchestratori.
+
+### Regole Ferree dentro le fasi superpowers
+
+| Regola Ferrea | Dove si applica |
+|---|---|
+| Code Intelligence (`codegraph_impact`, `codegraph_context`) | brainstorming → esplorazione del contesto |
+| Protocollo Form | brainstorming → domande di chiarimento |
+| ESLint Auto-Fix + `codegraph_detect_changes` | verification-before-completion, prima del commit |
+| Delegation (regola 2) | subagent-driven-development: l'implementer è un subagent `general-purpose` il cui prompt include `agent_read({ name: "<specialista>" })` e le skill di dominio da `skill_read` |
+
+### Dove finiscono spec e piani
+
+- Spec: `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md`
+- Piani: `docs/superpowers/plans/YYYY-MM-DD-<topic>.md`
+- Progetti client: stessi percorsi dentro `Progetti/<slug>/`
+- `docs/plans/` è archivio: non aggiungere nuovi file lì.
 
 ---
 
