@@ -225,6 +225,10 @@ function walkDir(dir: string, callback: (file: string, name: string) => void): v
         }
       }
     } else if (entry.name.endsWith('.md')) {
+      // A loose .md is a skill only if it declares frontmatter. Skill zones also
+      // hold docs (.agents/skills/ has AGENTS.md, CLAUDE.md, SKILLS-MAP.md) that
+      // would otherwise land in the catalog named after the file.
+      if (!/^\uFEFF?---\r?\n/.test(fs.readFileSync(full, 'utf-8').slice(0, 8))) continue
       callback(full, entry.name.replace('.md', ''))
     }
   }
