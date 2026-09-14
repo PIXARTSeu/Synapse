@@ -325,6 +325,30 @@ describe('importSkills()', () => {
     }
   })
 
+  // .agents/skills/ also holds loose docs (AGENTS.md, CLAUDE.md, SKILLS-MAP.md…).
+  // Frontmatter is what makes a loose .md a skill; a doc without it must not
+  // land in the catalog.
+  it('imports a loose .md from a skill zone only when it declares frontmatter', async () => {
+    const workspace = makeWorkspace()
+    const zone = path.join(workspace, '.agents', 'skills')
+
+    const dirSkill = path.join(zone, 'dir-skill')
+    fs.mkdirSync(dirSkill, { recursive: true })
+    fs.writeFileSync(path.join(dirSkill, 'SKILL.md'), `---\nname: dir-skill\ndescription: dir\n---\n# Dir\n`)
+    fs.writeFileSync(path.join(zone, 'loose-skill.md'), `---\nname: loose-skill\ndescription: loose\n---\n# Loose\n`)
+    fs.writeFileSync(path.join(zone, 'SKILLS-MAP.md'), `# Skills Map\n\n| Skill | Zone |\n|---|---|\n| dir-skill | process |\n`)
+
+    await importSkills(workspace)
+
+    const db = new Database(path.join(workspace, '.codegraph', 'graph.db'))
+    try {
+      const names = (db.prepare('SELECT name FROM skills ORDER BY name').all() as { name: string }[]).map((r) => r.name)
+      expect(names).toEqual(['dir-skill', 'loose-skill'])
+    } finally {
+      db.close()
+    }
+  })
+
   // Task 7: security gate wired into the importer (static-only, no LLM).
   // Fixture scores 59 under the real scan-static/score engine (piped-curl-to-
   // sudo-bash + SSH-key exfiltration inside an exec block) — verified via a
