@@ -51,12 +51,12 @@ packages/codegraph/          → SkillBrain MCP server (core)
 |-----------|-----------|---------------------|
 | New site / landing | @planner → @builder | ux + ui + growth → component-builder + api-developer |
 | Marketing / strategy | @planner | growth-architect + cro-designer + saas-copywriter + seo-specialist |
-| UI component | @builder | component-builder (+ ui-designer if needed) |
-| Fix / debug | @builder | (direct, or systematic-debugging skill) |
+| UI component | @builder | `superpowers:brainstorming` first, then component-builder (+ ui-designer if needed) |
+| Fix / debug | @builder | `superpowers:systematic-debugging` first, then domain skills |
 | Full audit | @builder | security-auditor + performance-engineer + seo-specialist in parallel |
 | Deploy | @builder | devops-engineer |
 | CMS setup | @builder | payload-cms + api-developer |
-| Refactor | @builder | CodeGraph impact analysis first, then component-builder |
+| Refactor | @builder | CodeGraph impact analysis first, then `superpowers:brainstorming` → component-builder |
 
 ### Effort Levels
 
@@ -108,6 +108,24 @@ packages/codegraph/          → SkillBrain MCP server (core)
 | `/system-sync` | Sync system registry |
 
 To use: read `.claude/command/{name}.md` and follow its protocol.
+
+---
+
+## Superpowers (process skills)
+
+The team's engineering process comes from the [superpowers](https://github.com/obra/superpowers) plugin, enabled for this repo in `.opencode/settings.json` (read by Claude Code as `.claude/settings.json`).
+
+| Skills | Source | How to load |
+|--------|--------|-------------|
+| 14 process skills: `brainstorming`, `writing-plans`, `executing-plans`, `subagent-driven-development`, `dispatching-parallel-agents`, `systematic-debugging`, `test-driven-development`, `verification-before-completion`, `requesting-code-review`, `receiving-code-review`, `using-git-worktrees`, `finishing-a-development-branch`, `writing-skills`, `using-superpowers` | superpowers plugin | `Skill` tool, as `superpowers:<skill>` |
+| Every other skill (domain, marketing, design, …) | SkillBrain | `skill_route` / `skill_read` |
+
+This is the one exception to "skills come only from SkillBrain". The old forks of the 14 skills stay in `.agents/skills/` (and in the `packages/codegraph/data/` bundle) for Codex only; they are deprecated in the SkillBrain catalog and listed in `SUPERSEDED_BY_PLUGIN` (`packages/storage/src/import-skills.ts`), so `import-skills --reactivate` never restores them.
+
+- **Plugin not installed?** Run `/plugin install superpowers@claude-plugins-official`.
+- **Symlinks in `.claude/skills/`** (Claude Code's native skills dir, not the `.claude/skill/` domain mirror)? Remove the ones for the 14 names above, or Claude sees two versions of each.
+- **After `finishing-a-development-branch`:** call `memory_suggest`, as the SkillBrain protocol requires.
+- How it fits Smart Intake and the Iron Rules: `AGENTS.md` → "Workflow tecnico (Superpowers)". Design: `docs/superpowers/specs/2026-09-14-superpowers-integration-design.md`.
 
 ---
 

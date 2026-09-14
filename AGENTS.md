@@ -31,6 +31,8 @@ Sistema multi-agente per sviluppo frontend professionale e marketing digitale.
 | "n8n", "workflow", "automazione" | `AUTOMATION` | MEDIO | NO |
 | "gdpr", "privacy", "cookie policy", "legal" | `COMPLIANCE` | MEDIO | NO |
 
+> Fase 0 sceglie il **workflow** in base al tipo di richiesta. Per il lavoro di codice, `superpowers:brainstorming` classifica poi **quanto processo** serve (spike / bounded / architectural): le due classificazioni si sommano, non si sostituiscono.
+
 ### Fase 1: Estrai Info dal Messaggio (silenzioso)
 
 Scansiona ed estrai: **target**, **prodotto**, **goal**, **esiste** (sito/brand/repo?), **tono**, **vincoli**.
@@ -45,7 +47,7 @@ Scansiona ed estrai: **target**, **prodotto**, **goal**, **esiste** (sito/brand/
 | prodotto | Cosa promuovi | Cosa ottimizzare | Tipo attività |
 | goal | Lead/demo/vendita | KPI target | Obiettivi sito |
 
-**Task SEMPLICI** — parti diretto se hai cosa + dove.
+**Task SEMPLICI** — parti diretto se hai cosa + dove (per il lavoro di codice resta il gate di approvazione di `superpowers:brainstorming`).
 
 ### Fase 3: Brief (solo COMPLESSI)
 
@@ -59,6 +61,8 @@ BRIEF COMPILATO:
 Confermo e parto?
 ```
 
+Quando un task COMPLESSO arriva a lavoro di codice, il brief confermato è l'input di `superpowers:brainstorming`, che non richiede ciò che il brief contiene già.
+
 ### Fase 4: Esecuzione
 
 | Tipo | Workflow |
@@ -66,16 +70,52 @@ Confermo e parto?
 | NUOVO_SITO | `/frontend` |
 | MARKETING | `/marketing` |
 | SETUP_PROGETTO | subagent project-architect |
-| COMPONENTE | subagent component-builder |
+| COMPONENTE | `superpowers:brainstorming` → *bounded*: implementazione TDD (prompt component-builder + skill di dominio) · *architectural*: `superpowers:writing-plans` → `superpowers:subagent-driven-development` |
 | AUDIT | `/audit` |
-| FIX | risolvi direttamente |
+| FIX | `superpowers:systematic-debugging` |
 | VIDEO | `/video` |
 | CMS | `/cms-setup` |
 | DESIGN | subagent ui-designer |
 | CLIENT | `/new-client` |
 | COMPLIANCE | `/gdpr-audit` o `/generate-legal` |
 | AUTOMATION | subagent n8n-workflow |
-| REFACTOR | codegraph_impact → poi procedi |
+| REFACTOR | codegraph_impact → `superpowers:brainstorming` → *bounded*: implementazione TDD · *architectural*: `superpowers:writing-plans` → `superpowers:subagent-driven-development` |
+
+---
+
+## Workflow tecnico (Superpowers)
+
+Per tutto il lavoro di codice (FIX, COMPONENTE, REFACTOR, feature) il *come* è governato dalle skill del plugin **superpowers**, caricate con il tool `Skill` come `superpowers:<skill>`. Design: `docs/superpowers/specs/2026-09-14-superpowers-integration-design.md`.
+
+```
+brainstorming ─┬─ spike ─────────► risposta / raccomandazione
+               ├─ bounded ───────► design in chat → implementazione (TDD)
+               └─ architectural ─► spec → writing-plans → subagent-driven-development
+                                                                   │
+FIX → systematic-debugging ────────────────────────────────────────┤
+                                                                   ▼
+        verification-before-completion → requesting-code-review → finishing-a-development-branch
+```
+
+**Il flusso gira nella sessione principale.** brainstorming è un dialogo con l'utente, e i subagent implementer/reviewer non possono lanciare altri subagent. @planner, @builder e gli specialisti sono prompt SkillBrain (`agent_read`) che la sessione principale usa, non orchestratori.
+
+**Codex.** Il tool `Skill`, i subagent `general-purpose` e `agent_read` esistono solo in Claude Code. Codex legge le stesse skill di processo da `.agents/skills/<skill>/SKILL.md` e segue lo stesso flusso in sequenza nella propria sessione.
+
+### Regole Ferree dentro le fasi superpowers
+
+| Regola Ferrea | Dove si applica |
+|---|---|
+| Code Intelligence (`codegraph_impact`, `codegraph_context`) | brainstorming → esplorazione del contesto; systematic-debugging → indagine sulla root cause (FIX) |
+| Protocollo Form | brainstorming → domande di chiarimento |
+| ESLint Auto-Fix + `codegraph_detect_changes` | prima di ogni commit: nel prompt di ogni implementer di subagent-driven-development e in verification-before-completion |
+| Delegation (regola 2) | subagent-driven-development: l'implementer è un subagent `general-purpose` il cui prompt include `agent_read({ name: "<specialista>" })` e le skill di dominio da `skill_read` |
+
+### Dove finiscono spec e piani
+
+- Spec: `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md`
+- Piani: `docs/superpowers/plans/YYYY-MM-DD-<topic>.md`
+- Progetti client: stessi percorsi dentro `Progetti/<slug>/`
+- `docs/plans/` è archivio: non aggiungere nuovi file lì.
 
 ---
 
@@ -177,7 +217,7 @@ MASTER_Fullstack session/     ← ROOT (config workflow)
 
 ## Skills — Adding & Using
 
-Skills are team-shared and live in the repo. Codex (and any other agent without MCP `skill_read`) reads them directly from the filesystem; Claude uses the MCP catalog backed by `.codegraph/graph.db`. Both pipelines see the same skills.
+Skills are team-shared and live in the repo. Codex (and any other agent without MCP `skill_read`) reads them directly from the filesystem; Claude uses the MCP catalog backed by `.codegraph/graph.db`. Both pipelines see the same skills — except the 14 superpowers process skills, which Claude Code loads from the plugin (see "Workflow tecnico (Superpowers)") while Codex reads the older copies in `.agents/skills/`.
 
 ### Reading an existing skill (Codex / Bash)
 

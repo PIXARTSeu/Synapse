@@ -90,7 +90,7 @@ program
   .argument('[path]', 'Path to workspace root', '.')
   .option('--full', 'Full-sync: also deprecate active skills no longer present in the bundle (protects System/Lifecycle)')
   .option('--force', 'With --full: override the blast-radius guard that refuses a prune wiping most of the catalog')
-  .option('--reactivate', 'Recovery: restore deprecated skills that ARE present in the bundle back to active (undoes a bad --full)')
+  .option('--reactivate', 'Recovery: restore deprecated skills that ARE present in the bundle back to active (undoes a bad --full; skips SUPERSEDED_BY_PLUGIN)')
   .action(async (targetPath: string, opts: { full?: boolean; force?: boolean; reactivate?: boolean }) => {
     try {
       const { importSkills } = await import('@skillbrain/storage')
