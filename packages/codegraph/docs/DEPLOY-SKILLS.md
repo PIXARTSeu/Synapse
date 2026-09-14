@@ -33,6 +33,15 @@ with an unchanged count would *skip* import entirely and new skills never
 shipped. Now a changed bundle re-imports automatically. The boot import is
 **additive** (idempotent, FTS-safe upsert) — it never deprecates.
 
+**Support files.** Every file inside a skill directory other than `SKILL.md` /
+`AGENT.md` (formats, templates, `references/`) is imported into `skill_files` and
+served by `skill_read({ name, file })`. Skipped: names starting with `.`, binary
+files (a NUL byte in the first 8 KB), files over 256 KB, and anything past 2 MB
+per skill (logged). Each import replaces a skill's whole file set. The security
+gate scans `SKILL.md` together with its support files. `entrypoint.sh` links each
+`lifecycle-skills/<name>` directory whole, not just its `SKILL.md`, so the boot
+import sees these files; the importer follows those symlinks.
+
 ### 3. Removing skills → manual full-sync
 Boot import never prunes (so dashboard-created skills aren't wiped). To make the
 DB exactly mirror the filesystem bundle — deprecating skills whose files were
