@@ -125,6 +125,7 @@ This is the one exception to "skills come only from SkillBrain". The old forks o
 - **Plugin not installed?** Run `/plugin install superpowers@claude-plugins-official`.
 - **Symlinks in `.claude/skills/`** (Claude Code's native skills dir, not the `.claude/skill/` domain mirror)? Remove the ones for the 14 names above, or Claude sees two versions of each.
 - **After `finishing-a-development-branch`:** call `memory_suggest`, as the SkillBrain protocol requires.
+- **Matt Pocock skills:** 17 skills from [mattpocock/skills](https://github.com/mattpocock/skills) live in the SkillBrain catalog (load with `skill_read`). Do **not** install the `mattpocock-skills` plugin: it duplicates superpowers' process skills. Mapping and exclusions: `.agents/skills/_ATTRIBUTION-mattpocock-skills.md`.
 - How it fits Smart Intake and the Iron Rules: `AGENTS.md` → "Workflow tecnico (Superpowers)". Design: `docs/superpowers/specs/2026-09-14-superpowers-integration-design.md`.
 
 ---
@@ -225,6 +226,8 @@ Both directories are tracked by git. New skills committed here become available 
 | `.claude/agents/<name>/AGENT.md` | `agent` | Stored as `agent:<name>` |
 | `.claude/agent/<file>.md` | `agent` | Flat files |
 | `.claude/command/<name>.md` | `command` | Slash commands |
+
+Files next to a skill's `SKILL.md` / `AGENT.md` (formats, templates, `references/`) are imported as **support files** and served by `skill_read({ name, file })`. Limits: `packages/codegraph/docs/DEPLOY-SKILLS.md`.
 
 ### Quality bar
 
