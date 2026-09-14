@@ -74,6 +74,8 @@ For every directory skill (`SKILL.md` or `AGENT.md` found inside `<name>/`), col
 - **Per-skill cap:** stop collecting once the running total would exceed 2 MB, and log a warning naming the skill.
 - Loose `.md` skills and commands have no support files.
 
+**Symlinks.** `walkDir` currently recognises a skill directory with `Dirent.isDirectory()`, which is `false` for a symlink to a directory. Section 3.5 makes every prod lifecycle skill such a symlink, so without a fix every process skill would silently drop out of the prod import. Both `walkDir` and the support-file collector therefore follow symlinks: an entry counts as a directory, or a file, by its `fs.statSync` target.
+
 Deduplication across zones keeps the skill that wins today (`.agents/skills/` over `.claude/skill/`), and that copy's files. After the skills upsert, every imported skill's file set is replaced, including an empty set, so a file deleted upstream disappears from the DB.
 
 ### 3.3 Security gate
