@@ -263,6 +263,8 @@ export interface ImportSkillsOptions {
    * retired by deleting its files stays deprecated, because it will not appear
    * in the discovery set. `pending` rows are never touched — those are
    * security-gate quarantines awaiting human review, not prune casualties.
+   * Skills in `SUPERSEDED_BY_PLUGIN` are skipped: they are always in the
+   * bundle but retired on purpose.
    */
   reactivate?: boolean
 }

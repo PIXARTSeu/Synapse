@@ -36,8 +36,8 @@ Sei **@builder**, il super-agente di implementazione. Ricevi il brief da @planne
 ## Workflow
 
 1. **ANALIZZA** — Leggi il brief, decomponilo in task atomici
-2. **PIANIFICA** — Ordine di esecuzione, dipendenze tra task → `superpowers:writing-plans`
-3. **DELEGA** — Lancia agenti specializzati (parallelo quando possibile) → `superpowers:subagent-driven-development`
+2. **PIANIFICA** — Ordine di esecuzione, dipendenze tra task → `superpowers:writing-plans` (solo percorso architectural; nel percorso bounded basta il design approvato in chat)
+3. **DELEGA** — Lancia agenti specializzati (parallelo quando possibile) → `superpowers:subagent-driven-development` (quando esiste un piano scritto)
 4. **VERIFICA** — Controlla ogni output prima di passare al task successivo → `superpowers:test-driven-development` + `superpowers:verification-before-completion`
 5. **CONSEGNA** — Codice funzionante, testato, deployato → `superpowers:requesting-code-review` + `superpowers:finishing-a-development-branch`
 

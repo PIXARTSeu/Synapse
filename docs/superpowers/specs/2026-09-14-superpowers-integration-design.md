@@ -1,7 +1,7 @@
 # Superpowers — Team Integration
 
 **Date:** 2026-09-14
-**Status:** Draft — awaiting review
+**Status:** Approved
 **Scope:** `.opencode/settings.json`, `AGENTS.md`, `CLAUDE.md`, `packages/codegraph/data/agents/{planner,builder}/AGENT.md`, `packages/storage/src/import-skills.ts`, SkillBrain prod catalog; per-machine: `.claude/skills/` symlinks, `.claude/agents/` mirror, local `.codegraph/graph.db`, global `~/.claude/CLAUDE.md`
 
 ---
@@ -20,7 +20,7 @@ Superpowers already reaches Claude through three routes that serve two different
 |-------|---------|-----------|
 | Plugin `superpowers@claude-plugins-official`, enabled only in one user's `~/.claude/settings.json` | 6.3.0 (2026-08-12), auto-updating | That user's Claude Code, as `superpowers:<skill>`, plus a SessionStart hook injecting `using-superpowers` |
 | `.agents/skills/<skill>/` (tracked) symlinked into `.claude/skills/` (per-machine mirror, not in git) | Early fork (`version: 1.0.0`); 13–655 diff lines from 6.3.0 per skill | Claude Code as unprefixed `<skill>` on machines that have the mirror; Codex from disk |
-| SkillBrain catalog (bundle `packages/codegraph/data/lifecycle-skills/`, identical to `.agents/skills/`) | Same early fork | `skill_route` / `skill_read` over MCP |
+| SkillBrain catalog (bundle `packages/codegraph/data/lifecycle-skills/`, identical to `.agents/skills/`, plus copies in `packages/codegraph/data/skill/<skill>/`) | Same early fork | `skill_route` / `skill_read` over MCP |
 
 The 14 skills: `brainstorming`, `dispatching-parallel-agents`, `executing-plans`, `finishing-a-development-branch`, `receiving-code-review`, `requesting-code-review`, `subagent-driven-development`, `systematic-debugging`, `test-driven-development`, `using-git-worktrees`, `using-superpowers`, `verification-before-completion`, `writing-plans`, `writing-skills`.
 
@@ -96,8 +96,8 @@ Normal imports, `--full` prune and the security gate are unchanged. Covered by a
   | Tipo | Before | After |
   |------|--------|-------|
   | `FIX` | risolvi direttamente | `superpowers:systematic-debugging` |
-  | `COMPONENTE` | subagent component-builder | `superpowers:brainstorming` → `subagent-driven-development` dispatching component-builder |
-  | `REFACTOR` | codegraph_impact → poi procedi | codegraph_impact → `superpowers:brainstorming` → … |
+  | `COMPONENTE` | subagent component-builder | `superpowers:brainstorming` → bounded: TDD implementation with the component-builder prompt · architectural: `writing-plans` → `subagent-driven-development` dispatching component-builder |
+  | `REFACTOR` | codegraph_impact → poi procedi | codegraph_impact → `superpowers:brainstorming` → bounded: TDD implementation · architectural: `writing-plans` → `subagent-driven-development` |
   | `MARKETING`, `VIDEO`, `AUDIT`, `CMS`, `COMPLIANCE`, `AUTOMATION`, `NUOVO_SITO`, `CLIENT`, `DESIGN`, `SETUP_PROGETTO` | — | unchanged |
 
 - New section **"Workflow tecnico (Superpowers)"** mapping the Iron Rules onto superpowers phases:
@@ -117,8 +117,8 @@ Agent edits land in the tracked bundle `packages/codegraph/data/agents/<name>/AG
 
 | Step | Skill |
 |------|-------|
-| PIANIFICA | `writing-plans` |
-| DELEGA | `subagent-driven-development` |
+| PIANIFICA | `writing-plans` (architectural path only) |
+| DELEGA | `subagent-driven-development` (when a written plan exists) |
 | VERIFICA | `test-driven-development` + `verification-before-completion` |
 | CONSEGNA | `requesting-code-review` + `finishing-a-development-branch` |
 
