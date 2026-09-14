@@ -374,6 +374,15 @@ const PRUNE_MAX_FRACTION = 0.25
 const PRUNE_GUARD_MIN_SKILLS = 10
 
 /**
+ * Security-gate input: SKILL.md followed by each support file introduced by its
+ * path, so a malicious template or script counts toward the verdict. The stored
+ * content stays SKILL.md alone.
+ */
+function scanText(content: string, files: SkillFileInput[]): string {
+  return [content, ...files.map((f) => `--- file: ${f.path} ---\n${f.content}`)].join('\n\n')
+}
+
+/**
  * Process skills whose Claude Code copy now ships as the superpowers plugin
  * (`superpowers:<name>`). Their SkillBrain rows are deprecated on purpose so
  * routing stops suggesting the stale forks, but the files stay in
@@ -573,7 +582,12 @@ export async function importSkills(
   // this is a bulk import path with no per-user credentials to resolve
   // synchronously — deeper LLM-judge scans are exposed on-demand via the
   // skill_scan MCP tool instead (Task 8), not run on every ingestion write.
-  const gated = await Promise.all(deduped.map((s) => applyGate(s)))
+  const gated = await Promise.all(
+    deduped.map(async (s) => {
+      const verdict = await applyGate({ ...s, content: scanText(s.content, supportFiles.get(s.name) ?? []) })
+      return { ...verdict, content: s.content }
+    }),
+  )
   const blocked = gated.filter((s) => s.riskRecommendation === 'BLOCK').length
   if (blocked > 0) {
     // No silent gating: surface the count so an operator watching import logs
