@@ -445,6 +445,36 @@ describe('importSkills()', () => {
     }
   })
 
+  // An unusable support file (permission-denied, or removed in a race between
+  // readdir and read) must be skipped, never abort the whole catalog import.
+  // Root ignores file-mode bits, so chmod 0o000 can't deny it a read there.
+  it.skipIf(process.getuid?.() === 0)('skips an unreadable support file instead of failing the import', async () => {
+    const workspace = makeWorkspace()
+    const dir = path.join(workspace, '.agents', 'skills', 'locked')
+    fs.mkdirSync(dir, { recursive: true })
+    fs.writeFileSync(path.join(dir, 'SKILL.md'), `---\nname: locked\ndescription: locked\n---\n# Locked\n`)
+    fs.writeFileSync(path.join(dir, 'ok.md'), '# OK\n')
+    const secretPath = path.join(dir, 'secret.md')
+    fs.writeFileSync(secretPath, 'secret')
+    fs.chmodSync(secretPath, 0o000)
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    try {
+      await importSkills(workspace)
+
+      const db = new Database(path.join(workspace, '.codegraph', 'graph.db'))
+      try {
+        expect(db.prepare("SELECT name FROM skills WHERE name = 'locked'").get()).toBeTruthy()
+        expect(new SkillsStore(db).listFiles('locked').map((f) => f.path)).toEqual(['ok.md'])
+      } finally {
+        db.close()
+      }
+    } finally {
+      fs.chmodSync(secretPath, 0o644)
+      warn.mockRestore()
+    }
+  })
+
   // Task 7: security gate wired into the importer (static-only, no LLM).
   // Fixture scores 59 under the real scan-static/score engine (piped-curl-to-
   // sudo-bash + SSH-key exfiltration inside an exec block) — verified via a

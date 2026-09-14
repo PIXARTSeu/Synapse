@@ -262,7 +262,17 @@ function collectSupportFiles(skillDir: string, entryFile: string): SkillFileInpu
   let capped = false
 
   const walk = (dir: string, rel: string): void => {
-    const entries = fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))
+    let entries: fs.Dirent[]
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))
+    } catch (err) {
+      // Permission-denied or otherwise unreadable subdirectory: skip it, never
+      // abort the whole catalog import over one bad directory.
+      console.warn(
+        `[import-skills] support files for "${path.basename(skillDir)}": cannot read directory "${rel || '.'}" — ${(err as Error).message}`,
+      )
+      return
+    }
     for (const entry of entries) {
       if (capped) return
       if (entry.name.startsWith('.')) continue
@@ -280,7 +290,17 @@ function collectSupportFiles(skillDir: string, entryFile: string): SkillFileInpu
       }
       if (!stat.isFile() || relPath === entryFile) continue
       if (stat.size > SUPPORT_FILE_MAX_BYTES) continue
-      const buf = fs.readFileSync(full)
+      let buf: Buffer
+      try {
+        buf = fs.readFileSync(full)
+      } catch (err) {
+        // Permission-denied, or removed in the race between readdir and read:
+        // skip this one file, never abort the whole catalog import.
+        console.warn(
+          `[import-skills] support files for "${path.basename(skillDir)}": cannot read "${relPath}" — ${(err as Error).message}`,
+        )
+        continue
+      }
       if (buf.subarray(0, BINARY_SNIFF_BYTES).includes(0)) continue
       if (total + buf.length > SUPPORT_FILES_MAX_TOTAL_BYTES) {
         capped = true
