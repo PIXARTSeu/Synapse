@@ -56,6 +56,8 @@ export type {
   SkillVersion,
   SkillUpsertOptions,
   SkillSearchResult,
+  SkillFileInput,
+  SkillFileInfo,
 } from './skills-store.js'
 
 export { ProjectsStore } from './projects-store.js'
