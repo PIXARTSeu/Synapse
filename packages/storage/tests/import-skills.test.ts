@@ -13,7 +13,7 @@ import os from 'node:os'
 import path from 'node:path'
 import Database from 'better-sqlite3'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { importSkills, SUPERSEDED_BY_PLUGIN } from '../src/import-skills.js'
+import { detectCategory, importSkills, SUPERSEDED_BY_PLUGIN } from '../src/import-skills.js'
 import { SkillsStore } from '../src/skills-store.js'
 
 const tempDirs: string[] = []
@@ -506,6 +506,15 @@ describe('importSkills()', () => {
     } finally {
       db.close()
     }
+  })
+
+  it('files the Matt Pocock skills under Process', () => {
+    const names = [
+      'codebase-design', 'domain-modeling', 'grill-me', 'grill-with-docs', 'grilling', 'handoff',
+      'improve-codebase-architecture', 'research', 'resolving-merge-conflicts', 'setup-matt-pocock-skills',
+      'teach', 'to-questionnaire', 'to-tickets', 'triage', 'wait-what', 'wayfinder', 'wizard',
+    ]
+    expect(names.filter((n) => detectCategory(n) !== 'Process')).toEqual([])
   })
 
   // Task 7: security gate wired into the importer (static-only, no LLM).

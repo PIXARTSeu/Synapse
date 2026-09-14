@@ -153,6 +153,15 @@ const CATEGORY_MAP: Record<string, string> = {
   'verification-before-completion': 'Process', 'writing-plans': 'Process',
   'writing-skills': 'Process',
 
+  // Process — Matt Pocock skills (MIT, mattpocock/skills @3cca18b; see
+  // .agents/skills/_ATTRIBUTION-mattpocock-skills.md)
+  'codebase-design': 'Process', 'domain-modeling': 'Process', 'grill-me': 'Process',
+  'grill-with-docs': 'Process', grilling: 'Process', handoff: 'Process',
+  'improve-codebase-architecture': 'Process', research: 'Process',
+  'resolving-merge-conflicts': 'Process', 'setup-matt-pocock-skills': 'Process',
+  teach: 'Process', 'to-questionnaire': 'Process', 'to-tickets': 'Process',
+  triage: 'Process', 'wait-what': 'Process', wayfinder: 'Process', wizard: 'Process',
+
   // Lifecycle (session/memory bootstraps)
   'capture-learning': 'Lifecycle', 'codegraph-context': 'Lifecycle',
   'load-learnings': 'Lifecycle', 'post-session-review': 'Lifecycle',
