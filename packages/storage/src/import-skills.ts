@@ -19,7 +19,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { openDb, closeDb } from './db.js'
-import { SkillsStore, type Skill, type SkillType } from './skills-store.js'
+import { SkillsStore, type Skill, type SkillFileInput, type SkillType } from './skills-store.js'
 import { applyGate } from './skill-gate.js'
 
 function pickDir(workspacePath: string, ...segments: string[]): string {
@@ -211,17 +211,17 @@ function parseFrontmatter(content: string): { name?: string; description?: strin
   return result
 }
 
-function walkDir(dir: string, callback: (file: string, name: string) => void): void {
+function walkDir(dir: string, callback: (file: string, name: string, skillDir?: string) => void): void {
   if (!fs.existsSync(dir)) return
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     if (entry.name.startsWith('_') || entry.name.startsWith('.')) continue
     const full = path.join(dir, entry.name)
-    if (entry.isDirectory()) {
+    if (isDirectoryEntry(entry, full)) {
       // Look for SKILL.md or AGENT.md in subdirectory
       for (const mdFile of ['SKILL.md', 'AGENT.md']) {
         const mdPath = path.join(full, mdFile)
         if (fs.existsSync(mdPath)) {
-          callback(mdPath, entry.name)
+          callback(mdPath, entry.name, full)
         }
       }
     } else if (entry.name.endsWith('.md')) {
@@ -232,6 +232,70 @@ function walkDir(dir: string, callback: (file: string, name: string) => void): v
       callback(full, entry.name.replace('.md', ''))
     }
   }
+}
+
+// The container links each lifecycle skill directory into .agents/skills/ as a
+// symlink, and Dirent.isDirectory() is false for a symlink — follow it.
+function isDirectoryEntry(entry: fs.Dirent, full: string): boolean {
+  if (entry.isDirectory()) return true
+  if (!entry.isSymbolicLink()) return false
+  try {
+    return fs.statSync(full).isDirectory()
+  } catch {
+    return false
+  }
+}
+
+const SUPPORT_FILE_MAX_BYTES = 256 * 1024
+const SUPPORT_FILES_MAX_TOTAL_BYTES = 2 * 1024 * 1024
+const BINARY_SNIFF_BYTES = 8192
+
+/**
+ * Every file in a skill directory other than its entry file (SKILL.md / AGENT.md):
+ * formats, templates, references/. Skips dotfiles, binary files and files over
+ * SUPPORT_FILE_MAX_BYTES; stops once the skill would exceed
+ * SUPPORT_FILES_MAX_TOTAL_BYTES. Paths are relative with '/' separators.
+ */
+function collectSupportFiles(skillDir: string, entryFile: string): SkillFileInput[] {
+  const files: SkillFileInput[] = []
+  let total = 0
+  let capped = false
+
+  const walk = (dir: string, rel: string): void => {
+    const entries = fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))
+    for (const entry of entries) {
+      if (capped) return
+      if (entry.name.startsWith('.')) continue
+      const full = path.join(dir, entry.name)
+      const relPath = rel ? `${rel}/${entry.name}` : entry.name
+      let stat: fs.Stats
+      try {
+        stat = fs.statSync(full)
+      } catch {
+        continue
+      }
+      if (stat.isDirectory()) {
+        walk(full, relPath)
+        continue
+      }
+      if (!stat.isFile() || relPath === entryFile) continue
+      if (stat.size > SUPPORT_FILE_MAX_BYTES) continue
+      const buf = fs.readFileSync(full)
+      if (buf.subarray(0, BINARY_SNIFF_BYTES).includes(0)) continue
+      if (total + buf.length > SUPPORT_FILES_MAX_TOTAL_BYTES) {
+        capped = true
+        return
+      }
+      total += buf.length
+      files.push({ path: relPath, content: buf.toString('utf-8'), bytes: buf.length })
+    }
+  }
+
+  walk(skillDir, '')
+  if (capped) {
+    console.warn(`[import-skills] support files for "${path.basename(skillDir)}" exceed 2 MB — the rest were skipped.`)
+  }
+  return files
 }
 
 export interface ImportSkillsOptions {
@@ -323,15 +387,19 @@ export async function importSkills(
 
   const now = new Date().toISOString()
   const skills: Skill[] = []
+  // Support files per final skill name. Filled alongside `skills` in walk order,
+  // so the same last-wins precedence as the dedupe below applies.
+  const supportFiles = new Map<string, SkillFileInput[]>()
   let agentCount = 0
   let commandCount = 0
 
   // Import domain skills from .claude/skill/ with .opencode/ fallback
   const domainDir = pickDir(workspacePath, 'skill')
-  walkDir(domainDir, (filePath, name) => {
+  walkDir(domainDir, (filePath, name, skillDir) => {
     if (name === 'INDEX') return // skip INDEX.md
     const content = fs.readFileSync(filePath, 'utf-8')
     const fm = parseFrontmatter(content)
+    supportFiles.set(fm.name || name, skillDir ? collectSupportFiles(skillDir, path.basename(filePath)) : [])
     skills.push({
       name: fm.name || name,
       category: detectCategory(name),
@@ -349,11 +417,12 @@ export async function importSkills(
   // (typescript-pro, vue-expert, etc.) don't get bucketed under "Process"
   // just because they live in this directory.
   const agentsSkillDir = path.join(workspacePath, '.agents', 'skills')
-  walkDir(agentsSkillDir, (filePath, name) => {
+  walkDir(agentsSkillDir, (filePath, name, skillDir) => {
     const content = fs.readFileSync(filePath, 'utf-8')
     const fm = parseFrontmatter(content)
     const type: SkillType = isLifecycleSkill(name) ? 'lifecycle' : 'process'
     const resolvedName = (fm.name as string) || name
+    supportFiles.set(resolvedName, skillDir ? collectSupportFiles(skillDir, path.basename(filePath)) : [])
     skills.push({
       name: resolvedName,
       category: detectCategory(resolvedName),
@@ -368,9 +437,10 @@ export async function importSkills(
 
   // Import agents from .claude/agents/ with .opencode/ fallback
   const agentsDir = pickDir(workspacePath, 'agents')
-  walkDir(agentsDir, (filePath, name) => {
+  walkDir(agentsDir, (filePath, name, skillDir) => {
     const content = fs.readFileSync(filePath, 'utf-8')
     const fm = parseFrontmatter(content)
+    supportFiles.set(`agent:${name}`, skillDir ? collectSupportFiles(skillDir, path.basename(filePath)) : [])
     skills.push({
       name: `agent:${name}`,
       category: 'Agents',
@@ -493,6 +563,13 @@ export async function importSkills(
 
   // Batch insert
   store.upsertBatch(gated)
+
+  // Replace every imported skill's support-file set. An empty set clears files
+  // deleted upstream; loose .md skills, commands, flat agents and the routing
+  // index never have any.
+  db.transaction(() => {
+    for (const s of deduped) store.replaceFiles(s.name, supportFiles.get(s.name) ?? [])
+  })()
 
   // Recovery: restore skills that a bad prune deprecated but the bundle still has.
   let reactivated = 0

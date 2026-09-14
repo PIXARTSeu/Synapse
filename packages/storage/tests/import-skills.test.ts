@@ -12,8 +12,9 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import Database from 'better-sqlite3'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { importSkills, SUPERSEDED_BY_PLUGIN } from '../src/import-skills.js'
+import { SkillsStore } from '../src/skills-store.js'
 
 const tempDirs: string[] = []
 
@@ -344,6 +345,101 @@ describe('importSkills()', () => {
     try {
       const names = (db.prepare('SELECT name FROM skills ORDER BY name').all() as { name: string }[]).map((r) => r.name)
       expect(names).toEqual(['dir-skill', 'loose-skill'])
+    } finally {
+      db.close()
+    }
+  })
+
+  // Directory skills ship sibling files (formats, templates, references/) that
+  // skill_read must be able to serve.
+  it('stores the support files of a directory skill, skipping hidden, binary and oversized files', async () => {
+    const workspace = makeWorkspace()
+    const dir = path.join(workspace, '.agents', 'skills', 'teach')
+    fs.mkdirSync(path.join(dir, 'references'), { recursive: true })
+    fs.mkdirSync(path.join(dir, '.git'), { recursive: true })
+    fs.writeFileSync(path.join(dir, 'SKILL.md'), `---\nname: teach\ndescription: teach\n---\n# Teach\nSee MISSION-FORMAT.md\n`)
+    fs.writeFileSync(path.join(dir, 'MISSION-FORMAT.md'), '# Mission format\n')
+    fs.writeFileSync(path.join(dir, 'references', 'guide.md'), '# Guide\n')
+    fs.writeFileSync(path.join(dir, '.hidden.md'), 'hidden')
+    fs.writeFileSync(path.join(dir, '.git', 'config'), 'x')
+    fs.writeFileSync(path.join(dir, 'logo.png'), Buffer.from([0x89, 0x50, 0x00, 0x47]))
+    fs.writeFileSync(path.join(dir, 'huge.md'), 'x'.repeat(256 * 1024 + 1))
+
+    await importSkills(workspace)
+
+    const db = new Database(path.join(workspace, '.codegraph', 'graph.db'))
+    try {
+      const store = new SkillsStore(db)
+      expect(store.listFiles('teach')).toEqual([
+        { path: 'MISSION-FORMAT.md', bytes: 17 },
+        { path: 'references/guide.md', bytes: 8 },
+      ])
+      expect(store.getFile('teach', 'references/guide.md')).toBe('# Guide\n')
+    } finally {
+      db.close()
+    }
+  })
+
+  it('stops collecting support files once a skill would exceed 2 MB', async () => {
+    const workspace = makeWorkspace()
+    const dir = path.join(workspace, '.agents', 'skills', 'bulky')
+    fs.mkdirSync(dir, { recursive: true })
+    fs.writeFileSync(path.join(dir, 'SKILL.md'), `---\nname: bulky\ndescription: bulky\n---\n# Bulky\n`)
+    for (let i = 0; i < 9; i++) fs.writeFileSync(path.join(dir, `part-${i}.md`), 'y'.repeat(250 * 1024))
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    try {
+      await importSkills(workspace)
+
+      const db = new Database(path.join(workspace, '.codegraph', 'graph.db'))
+      try {
+        const paths = new SkillsStore(db).listFiles('bulky').map((f) => f.path)
+        expect(paths).toEqual(['part-0.md', 'part-1.md', 'part-2.md', 'part-3.md', 'part-4.md', 'part-5.md', 'part-6.md', 'part-7.md'])
+      } finally {
+        db.close()
+      }
+      expect(warn.mock.calls.some(([msg]) => String(msg).includes('bulky'))).toBe(true)
+    } finally {
+      warn.mockRestore()
+    }
+  })
+
+  it('drops support files that were deleted before a re-import', async () => {
+    const workspace = makeWorkspace()
+    const dir = path.join(workspace, '.agents', 'skills', 'triage')
+    fs.mkdirSync(dir, { recursive: true })
+    fs.writeFileSync(path.join(dir, 'SKILL.md'), `---\nname: triage\ndescription: triage\n---\n# Triage\n`)
+    fs.writeFileSync(path.join(dir, 'AGENT-BRIEF.md'), 'brief')
+    fs.writeFileSync(path.join(dir, 'OUT-OF-SCOPE.md'), 'oos')
+    await importSkills(workspace)
+
+    fs.rmSync(path.join(dir, 'OUT-OF-SCOPE.md'))
+    await importSkills(workspace)
+
+    const db = new Database(path.join(workspace, '.codegraph', 'graph.db'))
+    try {
+      expect(new SkillsStore(db).listFiles('triage').map((f) => f.path)).toEqual(['AGENT-BRIEF.md'])
+    } finally {
+      db.close()
+    }
+  })
+
+  // Prod links each lifecycle skill directory into .agents/skills/ as a symlink.
+  it('imports a skill whose directory is a symlink, including its support files', async () => {
+    const workspace = makeWorkspace()
+    const real = path.join(makeWorkspace(), 'wizard')
+    fs.mkdirSync(real, { recursive: true })
+    fs.writeFileSync(path.join(real, 'SKILL.md'), `---\nname: wizard\ndescription: wizard\n---\n# Wizard\n`)
+    fs.writeFileSync(path.join(real, 'template.sh'), 'echo step\n')
+    fs.mkdirSync(path.join(workspace, '.agents', 'skills'), { recursive: true })
+    fs.symlinkSync(real, path.join(workspace, '.agents', 'skills', 'wizard'), 'dir')
+
+    await importSkills(workspace)
+
+    const db = new Database(path.join(workspace, '.codegraph', 'graph.db'))
+    try {
+      expect(db.prepare("SELECT name FROM skills WHERE name = 'wizard'").get()).toBeTruthy()
+      expect(new SkillsStore(db).listFiles('wizard').map((f) => f.path)).toEqual(['template.sh'])
     } finally {
       db.close()
     }
