@@ -13,7 +13,7 @@ import os from 'node:os'
 import path from 'node:path'
 import Database from 'better-sqlite3'
 import { afterEach, describe, expect, it } from 'vitest'
-import { importSkills } from '../src/import-skills.js'
+import { importSkills, SUPERSEDED_BY_PLUGIN } from '../src/import-skills.js'
 
 const tempDirs: string[] = []
 
@@ -260,6 +260,38 @@ describe('importSkills()', () => {
       expect(status('still-bundled')).toBe('active')     // restored
       expect(status('retired')).toBe('deprecated')       // not in bundle → stays retired
       expect(status('quarantined')).toBe('pending')      // never auto-approved
+    } finally {
+      db.close()
+    }
+  })
+
+  // The superpowers forks stay on disk for Codex but are retired from SkillBrain —
+  // Claude Code gets them from the plugin. A recovery run must not bring them back.
+  it('--reactivate leaves skills superseded by the superpowers plugin deprecated', async () => {
+    const workspace = makeWorkspace()
+    const writeSkill = (zone: string, name: string) => {
+      const dir = path.join(workspace, zone, name)
+      fs.mkdirSync(dir, { recursive: true })
+      fs.writeFileSync(path.join(dir, 'SKILL.md'), `---\nname: ${name}\ndescription: desc ${name}\n---\n# ${name}\n`)
+    }
+    writeSkill(path.join('.agents', 'skills'), 'brainstorming')
+    writeSkill(path.join('.claude', 'skill'), 'still-bundled')
+    await importSkills(workspace)
+
+    const dbPath = path.join(workspace, '.codegraph', 'graph.db')
+    const seed = new Database(dbPath)
+    seed.prepare("UPDATE skills SET status = 'deprecated' WHERE name IN ('brainstorming', 'still-bundled')").run()
+    seed.close()
+
+    const result = await importSkills(workspace, { reactivate: true })
+    expect(result.reactivated).toBe(1)
+
+    const db = new Database(dbPath)
+    try {
+      const status = (n: string) => (db.prepare('SELECT status AS s FROM skills WHERE name = ?').get(n) as { s: string }).s
+      expect(SUPERSEDED_BY_PLUGIN.has('brainstorming')).toBe(true)
+      expect(status('brainstorming')).toBe('deprecated')   // superseded → stays retired
+      expect(status('still-bundled')).toBe('active')       // ordinary recovery still works
     } finally {
       db.close()
     }

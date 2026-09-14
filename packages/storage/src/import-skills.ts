@@ -283,6 +283,31 @@ const PRUNE_MAX_FRACTION = 0.25
  */
 const PRUNE_GUARD_MIN_SKILLS = 10
 
+/**
+ * Process skills whose Claude Code copy now ships as the superpowers plugin
+ * (`superpowers:<name>`). Their SkillBrain rows are deprecated on purpose so
+ * routing stops suggesting the stale forks, but the files stay in
+ * `.agents/skills/` for Codex — so they are always "present in the bundle".
+ * `--reactivate` must skip them, or a recovery run would silently resurrect
+ * the forks. See docs/superpowers/specs/2026-09-14-superpowers-integration-design.md.
+ */
+export const SUPERSEDED_BY_PLUGIN: ReadonlySet<string> = new Set([
+  'brainstorming',
+  'dispatching-parallel-agents',
+  'executing-plans',
+  'finishing-a-development-branch',
+  'receiving-code-review',
+  'requesting-code-review',
+  'subagent-driven-development',
+  'systematic-debugging',
+  'test-driven-development',
+  'using-git-worktrees',
+  'using-superpowers',
+  'verification-before-completion',
+  'writing-plans',
+  'writing-skills',
+])
+
 export async function importSkills(
   workspacePath: string,
   opts: ImportSkillsOptions = {},
@@ -466,7 +491,8 @@ export async function importSkills(
   // Recovery: restore skills that a bad prune deprecated but the bundle still has.
   let reactivated = 0
   if (opts.reactivate) {
-    const names = deduped.map((s) => s.name)
+    const names = deduped.map((s) => s.name).filter((n) => !SUPERSEDED_BY_PLUGIN.has(n))
+    const superseded = deduped.length - names.length
     const upd = db.prepare(`UPDATE skills SET status = 'active', updated_at = ? WHERE name = ? AND status = 'deprecated'`)
     const nowIso = new Date().toISOString()
     const tx = db.transaction((ns: string[]) => {
@@ -476,6 +502,9 @@ export async function importSkills(
     })
     reactivated = tx(names)
     console.warn(`[import-skills] --reactivate: restored ${reactivated} deprecated skill(s) present in the bundle back to active.`)
+    if (superseded > 0) {
+      console.warn(`[import-skills] --reactivate: left ${superseded} plugin-superseded skill(s) untouched (SUPERSEDED_BY_PLUGIN).`)
+    }
   }
 
   // Optional full-sync: deprecate active skills that vanished from the bundle.

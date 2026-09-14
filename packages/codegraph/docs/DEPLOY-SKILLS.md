@@ -71,6 +71,12 @@ Note that a plain redeploy does **not** repair this: the boot import passes
 `status: NULL`, and the upsert deliberately keeps the existing status rather than
 resurrecting deprecated rows. Recovery is always an explicit step.
 
+**Plugin-superseded skills are never reactivated.** The 14 superpowers process
+skills listed in `SUPERSEDED_BY_PLUGIN` (`packages/storage/src/import-skills.ts`)
+stay in the bundle for Codex but are deprecated on purpose — Claude Code gets
+them from the superpowers plugin. `--reactivate` skips them and logs how many it
+left untouched. To bring one back, remove it from that list first.
+
 **Symptom to recognise.** Only `active` skills are listed or routed, so a bad
 prune shows up as `skill_route` returning plausible-but-irrelevant skills for
 every query — whatever handful survived — while `skill_read` still works fine for
