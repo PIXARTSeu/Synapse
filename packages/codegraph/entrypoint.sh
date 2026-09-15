@@ -29,12 +29,16 @@ run_import() {
   ln -sf /app/data/agents "$DATA_DIR/.opencode/agents"
   ln -sf /app/data/command "$DATA_DIR/.opencode/command"
 
-  # Symlink lifecycle skills
+  # Symlink lifecycle skills — the whole directory, so support files next to
+  # SKILL.md (formats, templates, references/) reach the importer. run_import
+  # removes these links when it finishes; the rm -rf clears whatever an
+  # interrupted earlier boot left behind (an old directory or link).
   if [ -d /app/data/lifecycle-skills ]; then
     for d in /app/data/lifecycle-skills/*/; do
+      [ -d "$d" ] || continue
       name=$(basename "$d")
-      mkdir -p "$DATA_DIR/.agents/skills/$name"
-      ln -sf "$d/SKILL.md" "$DATA_DIR/.agents/skills/$name/SKILL.md" 2>/dev/null
+      rm -rf "$DATA_DIR/.agents/skills/$name"
+      ln -sfn "${d%/}" "$DATA_DIR/.agents/skills/$name"
     done
   fi
 

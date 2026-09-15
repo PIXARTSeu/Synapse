@@ -19,7 +19,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { openDb, closeDb } from './db.js'
-import { SkillsStore, type Skill, type SkillType } from './skills-store.js'
+import { SkillsStore, type Skill, type SkillFileInput, type SkillType } from './skills-store.js'
 import { applyGate } from './skill-gate.js'
 
 function pickDir(workspacePath: string, ...segments: string[]): string {
@@ -153,6 +153,15 @@ const CATEGORY_MAP: Record<string, string> = {
   'verification-before-completion': 'Process', 'writing-plans': 'Process',
   'writing-skills': 'Process',
 
+  // Process — Matt Pocock skills (MIT, mattpocock/skills @3cca18b; see
+  // .agents/skills/_ATTRIBUTION-mattpocock-skills.md)
+  'codebase-design': 'Process', 'domain-modeling': 'Process', 'grill-me': 'Process',
+  'grill-with-docs': 'Process', grilling: 'Process', handoff: 'Process',
+  'improve-codebase-architecture': 'Process', research: 'Process',
+  'resolving-merge-conflicts': 'Process', 'setup-matt-pocock-skills': 'Process',
+  teach: 'Process', 'to-questionnaire': 'Process', 'to-tickets': 'Process',
+  triage: 'Process', 'wait-what': 'Process', wayfinder: 'Process', wizard: 'Process',
+
   // Lifecycle (session/memory bootstraps)
   'capture-learning': 'Lifecycle', 'codegraph-context': 'Lifecycle',
   'load-learnings': 'Lifecycle', 'post-session-review': 'Lifecycle',
@@ -211,17 +220,17 @@ function parseFrontmatter(content: string): { name?: string; description?: strin
   return result
 }
 
-function walkDir(dir: string, callback: (file: string, name: string) => void): void {
+function walkDir(dir: string, callback: (file: string, name: string, skillDir?: string) => void): void {
   if (!fs.existsSync(dir)) return
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     if (entry.name.startsWith('_') || entry.name.startsWith('.')) continue
     const full = path.join(dir, entry.name)
-    if (entry.isDirectory()) {
+    if (isDirectoryEntry(entry, full)) {
       // Look for SKILL.md or AGENT.md in subdirectory
       for (const mdFile of ['SKILL.md', 'AGENT.md']) {
         const mdPath = path.join(full, mdFile)
         if (fs.existsSync(mdPath)) {
-          callback(mdPath, entry.name)
+          callback(mdPath, entry.name, full)
         }
       }
     } else if (entry.name.endsWith('.md')) {
@@ -232,6 +241,110 @@ function walkDir(dir: string, callback: (file: string, name: string) => void): v
       callback(full, entry.name.replace('.md', ''))
     }
   }
+}
+
+// The container links each lifecycle skill directory into .agents/skills/ as a
+// symlink, and Dirent.isDirectory() is false for a symlink — follow it.
+function isDirectoryEntry(entry: fs.Dirent, full: string): boolean {
+  if (entry.isDirectory()) return true
+  if (!entry.isSymbolicLink()) return false
+  try {
+    return fs.statSync(full).isDirectory()
+  } catch {
+    return false
+  }
+}
+
+const SUPPORT_FILE_MAX_BYTES = 256 * 1024
+const SUPPORT_FILES_MAX_TOTAL_BYTES = 2 * 1024 * 1024
+const BINARY_SNIFF_BYTES = 8192
+
+/**
+ * Every file in a skill directory other than its entry file (SKILL.md / AGENT.md):
+ * formats, templates, references/. Skips dotfiles, binary files and files over
+ * SUPPORT_FILE_MAX_BYTES; stops once the skill would exceed
+ * SUPPORT_FILES_MAX_TOTAL_BYTES. Paths are relative with '/' separators.
+ */
+function collectSupportFiles(skillDir: string, entryFile: string): SkillFileInput[] {
+  const files: SkillFileInput[] = []
+  let total = 0
+  let capped = false
+
+  // Follow symlinks only while they resolve inside the skill directory, and walk
+  // each real directory once, so a link to /etc, to a parent, or to itself can
+  // neither leak files into the catalog nor loop.
+  let root: string
+  try {
+    root = fs.realpathSync(skillDir)
+  } catch {
+    return files
+  }
+  const visited = new Set<string>([root])
+
+  const walk = (dir: string, rel: string): void => {
+    let entries: fs.Dirent[]
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))
+    } catch (err) {
+      // Permission-denied or otherwise unreadable subdirectory: skip it, never
+      // abort the whole catalog import over one bad directory.
+      console.warn(
+        `[import-skills] support files for "${path.basename(skillDir)}": cannot read directory "${rel || '.'}" — ${(err as Error).message}`,
+      )
+      return
+    }
+    for (const entry of entries) {
+      if (capped) return
+      if (entry.name.startsWith('.')) continue
+      const full = path.join(dir, entry.name)
+      const relPath = rel ? `${rel}/${entry.name}` : entry.name
+      let stat: fs.Stats
+      try {
+        stat = fs.statSync(full)
+      } catch {
+        continue
+      }
+      let real: string
+      try {
+        real = fs.realpathSync(full)
+      } catch {
+        continue
+      }
+      if (real !== root && !real.startsWith(root + path.sep)) continue
+      if (stat.isDirectory()) {
+        if (visited.has(real)) continue
+        visited.add(real)
+        walk(full, relPath)
+        continue
+      }
+      if (!stat.isFile() || relPath === entryFile) continue
+      if (stat.size > SUPPORT_FILE_MAX_BYTES) continue
+      let buf: Buffer
+      try {
+        buf = fs.readFileSync(full)
+      } catch (err) {
+        // Permission-denied, or removed in the race between readdir and read:
+        // skip this one file, never abort the whole catalog import.
+        console.warn(
+          `[import-skills] support files for "${path.basename(skillDir)}": cannot read "${relPath}" — ${(err as Error).message}`,
+        )
+        continue
+      }
+      if (buf.subarray(0, BINARY_SNIFF_BYTES).includes(0)) continue
+      if (total + buf.length > SUPPORT_FILES_MAX_TOTAL_BYTES) {
+        capped = true
+        return
+      }
+      total += buf.length
+      files.push({ path: relPath, content: buf.toString('utf-8'), bytes: buf.length })
+    }
+  }
+
+  walk(skillDir, '')
+  if (capped) {
+    console.warn(`[import-skills] support files for "${path.basename(skillDir)}" exceed 2 MB — the rest were skipped.`)
+  }
+  return files
 }
 
 export interface ImportSkillsOptions {
@@ -290,6 +403,15 @@ const PRUNE_MAX_FRACTION = 0.25
 const PRUNE_GUARD_MIN_SKILLS = 10
 
 /**
+ * Security-gate input: SKILL.md followed by each support file introduced by its
+ * path, so a malicious template or script counts toward the verdict. The stored
+ * content stays SKILL.md alone.
+ */
+function scanText(content: string, files: SkillFileInput[]): string {
+  return [content, ...files.map((f) => `--- file: ${f.path} ---\n${f.content}`)].join('\n\n')
+}
+
+/**
  * Process skills whose Claude Code copy now ships as the superpowers plugin
  * (`superpowers:<name>`). Their SkillBrain rows are deprecated on purpose so
  * routing stops suggesting the stale forks, but the files stay in
@@ -323,15 +445,27 @@ export async function importSkills(
 
   const now = new Date().toISOString()
   const skills: Skill[] = []
+  // Support files per final skill name. Filled alongside `skills` in walk order,
+  // so the same last-wins precedence as the dedupe below applies.
+  const supportFiles = new Map<string, SkillFileInput[]>()
+  // A skill shipped in two zones keeps the non-empty file set when the copy that
+  // wins the dedupe has none: the bundle's lifecycle-skills copies of the dual-zone
+  // skills hold only SKILL.md, while their data/skill copies carry rules/,
+  // references/ or LICENSE.
+  const recordSupportFiles = (name: string, files: SkillFileInput[]): void => {
+    if (files.length === 0 && (supportFiles.get(name)?.length ?? 0) > 0) return
+    supportFiles.set(name, files)
+  }
   let agentCount = 0
   let commandCount = 0
 
   // Import domain skills from .claude/skill/ with .opencode/ fallback
   const domainDir = pickDir(workspacePath, 'skill')
-  walkDir(domainDir, (filePath, name) => {
+  walkDir(domainDir, (filePath, name, skillDir) => {
     if (name === 'INDEX') return // skip INDEX.md
     const content = fs.readFileSync(filePath, 'utf-8')
     const fm = parseFrontmatter(content)
+    recordSupportFiles(fm.name || name, skillDir ? collectSupportFiles(skillDir, path.basename(filePath)) : [])
     skills.push({
       name: fm.name || name,
       category: detectCategory(name),
@@ -349,11 +483,12 @@ export async function importSkills(
   // (typescript-pro, vue-expert, etc.) don't get bucketed under "Process"
   // just because they live in this directory.
   const agentsSkillDir = path.join(workspacePath, '.agents', 'skills')
-  walkDir(agentsSkillDir, (filePath, name) => {
+  walkDir(agentsSkillDir, (filePath, name, skillDir) => {
     const content = fs.readFileSync(filePath, 'utf-8')
     const fm = parseFrontmatter(content)
     const type: SkillType = isLifecycleSkill(name) ? 'lifecycle' : 'process'
     const resolvedName = (fm.name as string) || name
+    recordSupportFiles(resolvedName, skillDir ? collectSupportFiles(skillDir, path.basename(filePath)) : [])
     skills.push({
       name: resolvedName,
       category: detectCategory(resolvedName),
@@ -368,9 +503,10 @@ export async function importSkills(
 
   // Import agents from .claude/agents/ with .opencode/ fallback
   const agentsDir = pickDir(workspacePath, 'agents')
-  walkDir(agentsDir, (filePath, name) => {
+  walkDir(agentsDir, (filePath, name, skillDir) => {
     const content = fs.readFileSync(filePath, 'utf-8')
     const fm = parseFrontmatter(content)
+    recordSupportFiles(`agent:${name}`, skillDir ? collectSupportFiles(skillDir, path.basename(filePath)) : [])
     skills.push({
       name: `agent:${name}`,
       category: 'Agents',
@@ -483,7 +619,12 @@ export async function importSkills(
   // this is a bulk import path with no per-user credentials to resolve
   // synchronously — deeper LLM-judge scans are exposed on-demand via the
   // skill_scan MCP tool instead (Task 8), not run on every ingestion write.
-  const gated = await Promise.all(deduped.map((s) => applyGate(s)))
+  const gated = await Promise.all(
+    deduped.map(async (s) => {
+      const verdict = await applyGate({ ...s, content: scanText(s.content, supportFiles.get(s.name) ?? []) })
+      return { ...verdict, content: s.content }
+    }),
+  )
   const blocked = gated.filter((s) => s.riskRecommendation === 'BLOCK').length
   if (blocked > 0) {
     // No silent gating: surface the count so an operator watching import logs
@@ -493,6 +634,13 @@ export async function importSkills(
 
   // Batch insert
   store.upsertBatch(gated)
+
+  // Replace every imported skill's support-file set. An empty set clears files
+  // deleted upstream; loose .md skills, commands, flat agents and the routing
+  // index never have any.
+  db.transaction(() => {
+    for (const s of deduped) store.replaceFiles(s.name, supportFiles.get(s.name) ?? [])
+  })()
 
   // Recovery: restore skills that a bad prune deprecated but the bundle still has.
   let reactivated = 0

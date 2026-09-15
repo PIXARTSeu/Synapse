@@ -44,6 +44,19 @@ export interface Skill {
   riskScannedAt?: string
 }
 
+/** A file shipped next to a skill's SKILL.md / AGENT.md, as imported. */
+export interface SkillFileInput {
+  path: string
+  content: string
+  bytes: number
+}
+
+/** Listing entry for a skill's support file. */
+export interface SkillFileInfo {
+  path: string
+  bytes: number
+}
+
 export interface SkillVersion {
   id: string
   skillName: string
@@ -295,6 +308,11 @@ export class SkillsStore {
         WHERE skill_name = ? AND project = ? AND action IN ('loaded','applied')
         AND ts >= datetime('now', '-90 days')
       `),
+      // Support files (migration 037)
+      deleteFiles: this.db.prepare('DELETE FROM skill_files WHERE skill_name = ?'),
+      insertFile: this.db.prepare('INSERT INTO skill_files (skill_name, path, content, bytes) VALUES (?, ?, ?, ?)'),
+      listFiles: this.db.prepare('SELECT path, bytes FROM skill_files WHERE skill_name = ? ORDER BY path'),
+      getFile: this.db.prepare('SELECT content FROM skill_files WHERE skill_name = ? AND path = ?'),
     }
   }
 
@@ -414,6 +432,23 @@ export class SkillsStore {
       }
     }
     return undefined
+  }
+
+  /** Replace a skill's whole support-file set; an empty array clears it. */
+  replaceFiles(skillName: string, files: SkillFileInput[]): void {
+    this.db.transaction(() => {
+      this.stmts.deleteFiles.run(skillName)
+      for (const f of files) this.stmts.insertFile.run(skillName, f.path, f.content, f.bytes)
+    })()
+  }
+
+  listFiles(skillName: string): SkillFileInfo[] {
+    return this.stmts.listFiles.all(skillName) as SkillFileInfo[]
+  }
+
+  getFile(skillName: string, filePath: string): string | undefined {
+    const row = this.stmts.getFile.get(skillName, filePath) as { content: string } | undefined
+    return row?.content
   }
 
   list(type?: SkillType, category?: string): Skill[] {

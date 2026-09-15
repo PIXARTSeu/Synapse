@@ -79,7 +79,7 @@ Quando un task COMPLESSO arriva a lavoro di codice, il brief confermato è l'inp
 | CLIENT | `/new-client` |
 | COMPLIANCE | `/gdpr-audit` o `/generate-legal` |
 | AUTOMATION | subagent n8n-workflow |
-| REFACTOR | codegraph_impact → `superpowers:brainstorming` → *bounded*: implementazione TDD · *architectural*: `superpowers:writing-plans` → `superpowers:subagent-driven-development` |
+| REFACTOR | codegraph_impact → (opzionale: `improve-codebase-architecture` per scegliere dove intervenire) → `superpowers:brainstorming` → *bounded*: implementazione TDD · *architectural*: `superpowers:writing-plans` → `superpowers:subagent-driven-development` |
 
 ---
 
@@ -109,6 +109,27 @@ FIX → systematic-debugging ─────────────────
 | Protocollo Form | brainstorming → domande di chiarimento |
 | ESLint Auto-Fix + `codegraph_detect_changes` | prima di ogni commit: nel prompt di ogni implementer di subagent-driven-development e in verification-before-completion |
 | Delegation (regola 2) | subagent-driven-development: l'implementer è un subagent `general-purpose` il cui prompt include `agent_read({ name: "<specialista>" })` e le skill di dominio da `skill_read` |
+
+### Skill di Matt Pocock (da SkillBrain)
+
+17 skill di [mattpocock/skills](https://github.com/mattpocock/skills) (MIT) sono nel catalogo SkillBrain. Si caricano con `skill_read`; i loro file affiancati con `skill_read({ name, file })`. Attribuzione e skill escluse: `.agents/skills/_ATTRIBUTION-mattpocock-skills.md`.
+
+| Quando | Skill |
+|---|---|
+| Mettere sotto pressione un piano o una decisione ("grill me") | `grilling`, `grill-me`; `grill-with-docs` se deve produrre `CONTEXT.md` e ADR |
+| Brainstorming architectural: termini di dominio, `CONTEXT.md`, ADR | `domain-modeling` |
+| Brainstorming architectural: interfaccia di un modulo | `codebase-design` |
+| REFACTOR senza un punto preciso da cui partire | `improve-codebase-architecture` |
+| Piano che supera una sessione o va diviso tra persone | dopo `superpowers:writing-plans`: `to-tickets`; lavoro enorme e ancora da definire: `wayfinder` |
+| Issue o PR in arrivo | `triage` |
+| Primo uso del flusso issue in un repo | `setup-matt-pocock-skills` (una volta) |
+| Utilità | `research`, `teach`, `to-questionnaire`, `wait-what`, `wizard`, `resolving-merge-conflicts`, `handoff` |
+
+- `grilling` affianca `superpowers:brainstorming` ma non ne sostituisce il gate di approvazione.
+- Se una di queste skill nomina una skill upstream non importata, usa l'equivalente superpowers: `implement` → `superpowers:executing-plans` / `superpowers:subagent-driven-development` · `tdd` → `superpowers:test-driven-development` · `to-spec` → `superpowers:brainstorming` · `prototype` → percorso spike di `superpowers:brainstorming` · `code-review` → `superpowers:requesting-code-review` · `diagnosing-bugs` → `superpowers:systematic-debugging`.
+- Undici di queste skill, upstream, si avviano solo su richiesta esplicita dell'utente (`disable-model-invocation: true`): `grill-me`, `grill-with-docs`, `handoff`, `improve-codebase-architecture`, `setup-matt-pocock-skills`, `teach`, `to-questionnaire`, `to-tickets`, `triage`, `wait-what`, `wayfinder`. `skill_route` può suggerirle, ma non vanno eseguite di tua iniziativa: proponile e aspetta il sì. `triage`, `to-tickets` e `wayfinder` scrivono sull'issue tracker.
+- Nel testo upstream `/<skill>` significa `skill_read({ name: "<skill>" })`.
+- Effetti collaterali upstream: `setup-matt-pocock-skills` modifica il `CLAUDE.md` del repo e crea `CONTEXT.md` e `docs/adr/` (chiedi prima); `resolving-merge-conflicts` fa commit da sola, quindi applica prima ESLint Auto-Fix e `codegraph_detect_changes`.
 
 ### Dove finiscono spec e piani
 

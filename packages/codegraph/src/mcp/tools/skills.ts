@@ -21,6 +21,7 @@ import { UsersEnvStore } from '@skillbrain/storage'
 import { dashboardUrl } from '../../constants.js'
 import type { ToolContext } from './index.js'
 import { resolveScanTarget, runSkillScan } from './skill-scan.js'
+import { formatSkillFile, formatSkillRead, normalizeSupportPath } from './skill-files.js'
 
 const MEMORY_REPO_NAME = process.env.SKILLBRAIN_MEMORY_REPO || 'skillbrain'
 const SKILLBRAIN_ROOT = process.env.SKILLBRAIN_ROOT || ''
@@ -145,31 +146,33 @@ export function registerSkillTools(server: McpServer, ctx: ToolContext): void {
   // --- Tool: skill_read ---
   server.tool(
     'skill_read',
-    'Read the full content of a skill, agent, or command by name',
+    'Read the full content of a skill, agent, or command by name. Pass file to read one of its supporting files.',
     {
       name: z.string().describe('Skill name (e.g., "nextjs", "agent:builder", "command:frontend")'),
+      file: z.string().optional().describe('Path of a supporting file listed under "Supporting files" (e.g., "MISSION-FORMAT.md")'),
       project: z.string().optional().describe('Current project (for telemetry)'),
       sessionId: z.string().optional().describe('Synapse session id (for telemetry, if known)'),
       task: z.string().optional().describe('Task this skill is being loaded for (for telemetry)'),
       repo: z.string().optional(),
     },
-    async ({ name, project, sessionId, task, repo }) => {
+    async ({ name, file, project, sessionId, task, repo }) => {
       const resolved = resolveMemoryRepo(repo)
       if (!resolved) return { content: [{ type: 'text', text: 'Repository not found.' }] }
 
-      const skill = withSkillsStore(resolved.path, (store) => {
+      const text = withSkillsStore(resolved.path, (store) => {
         const s = store.get(name)
-        if (s) store.recordUsage(s.name, 'loaded', { sessionId, project, task, userId: ctx.userId })
-        return s
+        if (!s) return undefined
+        const files = store.listFiles(s.name)
+        if (file === undefined) {
+          store.recordUsage(s.name, 'loaded', { sessionId, project, task, userId: ctx.userId })
+          return formatSkillRead(s, files)
+        }
+        const key = normalizeSupportPath(file)
+        return formatSkillFile(s.name, key, store.getFile(s.name, key), files)
       })
-      if (!skill) return { content: [{ type: 'text', text: `Skill "${name}" not found. Use skill_list to see available skills.` }] }
+      if (text === undefined) return { content: [{ type: 'text', text: `Skill "${name}" not found. Use skill_list to see available skills.` }] }
 
-      return {
-        content: [{
-          type: 'text',
-          text: `# ${skill.name} (${skill.type}, ${skill.category})\n\n${skill.content}`,
-        }],
-      }
+      return { content: [{ type: 'text', text }] }
     },
   )
 
