@@ -14,6 +14,11 @@ export function formatBytes(bytes: number): string {
   return bytes < 1024 ? `${bytes} B` : `${(bytes / 1024).toFixed(1)} KB`
 }
 
+/** Upstream skills link support files as "./NAME.md"; stored paths have no "./". */
+export function normalizeSupportPath(file: string): string {
+  return file.replace(/^(\.\/)+/, '')
+}
+
 /** skill_read output without `file`: the skill, plus its support files when it has any. */
 export function formatSkillRead(skill: Pick<Skill, 'name' | 'type' | 'category' | 'content'>, files: SkillFileInfo[]): string {
   const base = `# ${skill.name} (${skill.type}, ${skill.category})\n\n${skill.content}`

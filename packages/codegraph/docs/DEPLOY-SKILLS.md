@@ -40,7 +40,9 @@ files (a NUL byte in the first 8 KB), files over 256 KB, and anything past 2 MB
 per skill (logged). Each import replaces a skill's whole file set. The security
 gate scans `SKILL.md` together with its support files. `entrypoint.sh` links each
 `lifecycle-skills/<name>` directory whole, not just its `SKILL.md`, so the boot
-import sees these files; the importer follows those symlinks.
+import sees these files; the importer follows those symlinks. A skill shipped in
+both bundle zones keeps the non-empty file set, and support-file symlinks that
+resolve outside the skill directory are ignored.
 
 ### 3. Removing skills → manual full-sync
 Boot import never prunes (so dashboard-created skills aren't wiped). To make the

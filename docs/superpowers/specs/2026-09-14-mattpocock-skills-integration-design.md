@@ -78,6 +78,10 @@ For every directory skill (`SKILL.md` or `AGENT.md` found inside `<name>/`), col
 
 Deduplication across zones keeps the skill that wins today (`.agents/skills/` over `.claude/skill/`), and that copy's files. After the skills upsert, every imported skill's file set is replaced, including an empty set, so a file deleted upstream disappears from the DB.
 
+**Dual-zone skills.** When the copy that wins the dedupe has no support files but an earlier copy of the same skill does, the earlier file set is kept. The bundle ships about 29 skills in both `data/skill/` and `data/lifecycle-skills/`. The lifecycle copies hold only `SKILL.md`, while the domain copies carry `rules/`, `references/` or `LICENSE`. Without this rule, `vercel-react-best-practices`, `ui-ux-pro-max`, `next-best-practices` and `hallmark` would serve no files in prod.
+
+**Containment.** A support-file entry is used only if its real path lies inside the skill directory's real path, and each real directory is walked once.
+
 ### 3.3 Security gate
 
 - The gate scans a combined text: `SKILL.md`, then each support file prefixed with a `--- file: <path> ---` line.
@@ -97,7 +101,7 @@ New optional parameter `file: string`.
   ```
 - **With `file`:** return that file's content under a `# <name> / <path>` heading.
 - **Unknown path:** return `File "<path>" not found for skill "<name>".` plus the available list.
-- **Lookup:** exact `(skill_name, path)` key match only. No filesystem access, so no traversal surface.
+- **Lookup:** a leading `./` in `file` is ignored (upstream links read `./NAME.md`); then exact `(skill_name, path)` key match only. No filesystem access, so no traversal surface.
 - **Telemetry:** `recordUsage(..., 'loaded')` fires only on the read without `file`.
 
 ### 3.5 Container entrypoint
@@ -207,6 +211,8 @@ Followed by three rules:
 - These skills load with `skill_read`; their support files with `skill_read({ name, file })`.
 - `grilling` complements `brainstorming` and never replaces its approval gate.
 - When one of these skills names an excluded upstream skill, use the superpowers equivalent (the §4.4 map).
+- Eleven of the 17 declare `disable-model-invocation: true` upstream (`grill-me`, `grill-with-docs`, `handoff`, `improve-codebase-architecture`, `setup-matt-pocock-skills`, `teach`, `to-questionnaire`, `to-tickets`, `triage`, `wait-what`, `wayfinder`). SkillBrain does not enforce the field, so `AGENTS.md` states they start only on the user's explicit request.
+- Upstream `/<skill>` references mean `skill_read({ name: "<skill>" })`; `AGENTS.md` also notes the upstream side effects of `setup-matt-pocock-skills` (edits `CLAUDE.md`, writes `CONTEXT.md` and `docs/adr/`) and `resolving-merge-conflicts` (commits on its own).
 
 The Fase 4 `REFACTOR` row gains `improve-codebase-architecture` as an optional first step before `superpowers:brainstorming`.
 
@@ -241,7 +247,7 @@ Next to the `skill_read` example in "Skills come ONLY from SkillBrain", add a li
 | 2 | Part 2: vendor the 17 skills, attribution, `CATEGORY_MAP` | Import into a scratch workspace copy: all 17 `active`, category `Process`; besides `agents/openai.yaml`, `teach` has 4 support files and `setup-matt-pocock-skills` has 5 |
 | 3 | Wiring: `AGENTS.md`, `CLAUDE.md`, `DEPLOY-SKILLS.md` | Grep checks for the new subsection and lines |
 | 4 | PR, CI green, merge | CI `build-and-test` pass |
-| 5 | Prod: Coolify redeploy (user) | `skill_read("teach")` lists support files; `skill_read({ name: "teach", file: "MISSION-FORMAT.md" })` returns it; `skill_read("aso")` lists `references/`; `skill_route` for "grill me on this plan", "set up the issue tracker for the skills", "design the module interface" surfaces the matching skills; none of the 17 is `pending` |
+| 5 | Prod: Coolify redeploy (user) | `skill_read("teach")` lists support files; `skill_read({ name: "teach", file: "MISSION-FORMAT.md" })` returns it; `skill_read("aso")` lists `references/`; `skill_read("vercel-react-best-practices")` lists `rules/` files; `skill_route` for "grill me on this plan", "set up the issue tracker for the skills", "design the module interface" surfaces the matching skills; none of the 17 is `pending` |
 | 6 | Local: `git pull`, rebuild skill-guard/storage/codegraph, `import-skills .`, user reconnects `codegraph-local` via `/mcp`, global `CLAUDE.md` line | The step 5 checks via `mcp__codegraph-local__*` with `repo: "Synapse"` |
 
 **Rollback:**

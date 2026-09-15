@@ -30,9 +30,9 @@ run_import() {
   ln -sf /app/data/command "$DATA_DIR/.opencode/command"
 
   # Symlink lifecycle skills — the whole directory, so support files next to
-  # SKILL.md (formats, templates, references/) reach the importer. Earlier boots
-  # left a real directory holding only a SKILL.md symlink on the persistent
-  # volume; remove it before linking.
+  # SKILL.md (formats, templates, references/) reach the importer. run_import
+  # removes these links when it finishes; the rm -rf clears whatever an
+  # interrupted earlier boot left behind (an old directory or link).
   if [ -d /app/data/lifecycle-skills ]; then
     for d in /app/data/lifecycle-skills/*/; do
       [ -d "$d" ] || continue

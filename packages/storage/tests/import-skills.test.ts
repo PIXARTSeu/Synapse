@@ -517,6 +517,56 @@ describe('importSkills()', () => {
     expect(names.filter((n) => detectCategory(n) !== 'Process')).toEqual([])
   })
 
+  // The bundle ships ~29 skills in both zones; the lifecycle copy holds only SKILL.md.
+  it('keeps the support files of a skill shipped in both zones when the winning copy has none', async () => {
+    const workspace = makeWorkspace()
+    const domain = path.join(workspace, '.claude', 'skill', 'dual')
+    fs.mkdirSync(path.join(domain, 'rules'), { recursive: true })
+    fs.writeFileSync(path.join(domain, 'SKILL.md'), `---\nname: dual\ndescription: dual\n---\n# Dual\nSee rules/a.md\n`)
+    fs.writeFileSync(path.join(domain, 'rules', 'a.md'), '# Rule A\n')
+    const lifecycle = path.join(workspace, '.agents', 'skills', 'dual')
+    fs.mkdirSync(lifecycle, { recursive: true })
+    fs.writeFileSync(path.join(lifecycle, 'SKILL.md'), `---\nname: dual\ndescription: dual\n---\n# Dual\nSee rules/a.md\n`)
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    try {
+      await importSkills(workspace)
+
+      const db = new Database(path.join(workspace, '.codegraph', 'graph.db'))
+      try {
+        const row = db.prepare("SELECT type FROM skills WHERE name = 'dual'").get() as { type: string } | undefined
+        expect(row?.type).toBe('process') // dedupe precedence unchanged
+        expect(new SkillsStore(db).listFiles('dual').map((f) => f.path)).toEqual(['rules/a.md'])
+      } finally {
+        db.close()
+      }
+    } finally {
+      warn.mockRestore()
+    }
+  })
+
+  it('ignores support-file symlinks that resolve outside the skill directory, and walks each directory once', async () => {
+    const workspace = makeWorkspace()
+    const outside = makeWorkspace()
+    fs.writeFileSync(path.join(outside, 'secret.txt'), 'outside\n')
+    const dir = path.join(workspace, '.agents', 'skills', 'fenced')
+    fs.mkdirSync(dir, { recursive: true })
+    fs.writeFileSync(path.join(dir, 'SKILL.md'), `---\nname: fenced\ndescription: fenced\n---\n# Fenced\n`)
+    fs.writeFileSync(path.join(dir, 'FORMAT.md'), '# Format\n')
+    fs.symlinkSync(outside, path.join(dir, 'escape'), 'dir')
+    fs.symlinkSync(path.join(outside, 'secret.txt'), path.join(dir, 'secret.txt'))
+    fs.symlinkSync(dir, path.join(dir, 'loop'), 'dir')
+
+    await importSkills(workspace)
+
+    const db = new Database(path.join(workspace, '.codegraph', 'graph.db'))
+    try {
+      expect(new SkillsStore(db).listFiles('fenced').map((f) => f.path)).toEqual(['FORMAT.md'])
+    } finally {
+      db.close()
+    }
+  })
+
   // Task 7: security gate wired into the importer (static-only, no LLM).
   // Fixture scores 59 under the real scan-static/score engine (piped-curl-to-
   // sudo-bash + SSH-key exfiltration inside an exec block) — verified via a

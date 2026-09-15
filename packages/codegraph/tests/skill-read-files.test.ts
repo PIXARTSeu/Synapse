@@ -12,7 +12,7 @@
 // into these pure formatters (same testing approach as skill-scan-tool.test.ts).
 
 import { describe, expect, it } from 'vitest'
-import { formatSkillFile, formatSkillRead } from '../src/mcp/tools/skill-files.js'
+import { formatSkillFile, formatSkillRead, normalizeSupportPath } from '../src/mcp/tools/skill-files.js'
 
 const skill = { name: 'teach', type: 'process' as const, category: 'Process', content: '# Teach\nBody' }
 
@@ -57,5 +57,17 @@ describe('formatSkillFile', () => {
     expect(formatSkillFile('teach', 'nope.md', undefined, [])).toBe(
       'File "nope.md" not found for skill "teach". Available files:\n(none)',
     )
+  })
+})
+
+describe('normalizeSupportPath', () => {
+  it('drops a leading ./ so upstream links resolve', () => {
+    expect(normalizeSupportPath('./CONTEXT-FORMAT.md')).toBe('CONTEXT-FORMAT.md')
+    expect(normalizeSupportPath('././references/a.md')).toBe('references/a.md')
+  })
+
+  it('leaves other paths unchanged', () => {
+    expect(normalizeSupportPath('references/a.md')).toBe('references/a.md')
+    expect(normalizeSupportPath('MISSION-FORMAT.md')).toBe('MISSION-FORMAT.md')
   })
 })

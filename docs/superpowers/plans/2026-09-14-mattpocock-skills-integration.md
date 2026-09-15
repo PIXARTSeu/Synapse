@@ -1349,6 +1349,7 @@ Run these MCP calls:
 - `mcp__codegraph__skill_read({ name: "teach", file: "MISSION-FORMAT.md" })` → starts with `# teach / MISSION-FORMAT.md`.
 - `mcp__codegraph__skill_read({ name: "teach", file: "nope.md" })` → `File "nope.md" not found for skill "teach". Available files:`.
 - `mcp__codegraph__skill_read({ name: "aso" })` → lists `references/…` files.
+- `mcp__codegraph__skill_read({ name: "vercel-react-best-practices" })` → lists `rules/…` files (dual-zone skill).
 - `mcp__codegraph__skill_route({ task: "grill me on this plan" })` includes `grilling` or `grill-me`.
 - `mcp__codegraph__skill_route({ task: "set up the issue tracker for the skills" })` includes `setup-matt-pocock-skills`.
 - `mcp__codegraph__skill_route({ task: "design the module interface" })` includes `codebase-design`.

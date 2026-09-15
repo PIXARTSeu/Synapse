@@ -270,6 +270,17 @@ function collectSupportFiles(skillDir: string, entryFile: string): SkillFileInpu
   let total = 0
   let capped = false
 
+  // Follow symlinks only while they resolve inside the skill directory, and walk
+  // each real directory once, so a link to /etc, to a parent, or to itself can
+  // neither leak files into the catalog nor loop.
+  let root: string
+  try {
+    root = fs.realpathSync(skillDir)
+  } catch {
+    return files
+  }
+  const visited = new Set<string>([root])
+
   const walk = (dir: string, rel: string): void => {
     let entries: fs.Dirent[]
     try {
@@ -293,7 +304,16 @@ function collectSupportFiles(skillDir: string, entryFile: string): SkillFileInpu
       } catch {
         continue
       }
+      let real: string
+      try {
+        real = fs.realpathSync(full)
+      } catch {
+        continue
+      }
+      if (real !== root && !real.startsWith(root + path.sep)) continue
       if (stat.isDirectory()) {
+        if (visited.has(real)) continue
+        visited.add(real)
         walk(full, relPath)
         continue
       }
@@ -428,6 +448,14 @@ export async function importSkills(
   // Support files per final skill name. Filled alongside `skills` in walk order,
   // so the same last-wins precedence as the dedupe below applies.
   const supportFiles = new Map<string, SkillFileInput[]>()
+  // A skill shipped in two zones keeps the non-empty file set when the copy that
+  // wins the dedupe has none: the bundle's lifecycle-skills copies of the dual-zone
+  // skills hold only SKILL.md, while their data/skill copies carry rules/,
+  // references/ or LICENSE.
+  const recordSupportFiles = (name: string, files: SkillFileInput[]): void => {
+    if (files.length === 0 && (supportFiles.get(name)?.length ?? 0) > 0) return
+    supportFiles.set(name, files)
+  }
   let agentCount = 0
   let commandCount = 0
 
@@ -437,7 +465,7 @@ export async function importSkills(
     if (name === 'INDEX') return // skip INDEX.md
     const content = fs.readFileSync(filePath, 'utf-8')
     const fm = parseFrontmatter(content)
-    supportFiles.set(fm.name || name, skillDir ? collectSupportFiles(skillDir, path.basename(filePath)) : [])
+    recordSupportFiles(fm.name || name, skillDir ? collectSupportFiles(skillDir, path.basename(filePath)) : [])
     skills.push({
       name: fm.name || name,
       category: detectCategory(name),
@@ -460,7 +488,7 @@ export async function importSkills(
     const fm = parseFrontmatter(content)
     const type: SkillType = isLifecycleSkill(name) ? 'lifecycle' : 'process'
     const resolvedName = (fm.name as string) || name
-    supportFiles.set(resolvedName, skillDir ? collectSupportFiles(skillDir, path.basename(filePath)) : [])
+    recordSupportFiles(resolvedName, skillDir ? collectSupportFiles(skillDir, path.basename(filePath)) : [])
     skills.push({
       name: resolvedName,
       category: detectCategory(resolvedName),
@@ -478,7 +506,7 @@ export async function importSkills(
   walkDir(agentsDir, (filePath, name, skillDir) => {
     const content = fs.readFileSync(filePath, 'utf-8')
     const fm = parseFrontmatter(content)
-    supportFiles.set(`agent:${name}`, skillDir ? collectSupportFiles(skillDir, path.basename(filePath)) : [])
+    recordSupportFiles(`agent:${name}`, skillDir ? collectSupportFiles(skillDir, path.basename(filePath)) : [])
     skills.push({
       name: `agent:${name}`,
       category: 'Agents',

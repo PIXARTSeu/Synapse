@@ -21,7 +21,7 @@ import { UsersEnvStore } from '@skillbrain/storage'
 import { dashboardUrl } from '../../constants.js'
 import type { ToolContext } from './index.js'
 import { resolveScanTarget, runSkillScan } from './skill-scan.js'
-import { formatSkillFile, formatSkillRead } from './skill-files.js'
+import { formatSkillFile, formatSkillRead, normalizeSupportPath } from './skill-files.js'
 
 const MEMORY_REPO_NAME = process.env.SKILLBRAIN_MEMORY_REPO || 'skillbrain'
 const SKILLBRAIN_ROOT = process.env.SKILLBRAIN_ROOT || ''
@@ -167,7 +167,8 @@ export function registerSkillTools(server: McpServer, ctx: ToolContext): void {
           store.recordUsage(s.name, 'loaded', { sessionId, project, task, userId: ctx.userId })
           return formatSkillRead(s, files)
         }
-        return formatSkillFile(s.name, file, store.getFile(s.name, file), files)
+        const key = normalizeSupportPath(file)
+        return formatSkillFile(s.name, key, store.getFile(s.name, key), files)
       })
       if (text === undefined) return { content: [{ type: 'text', text: `Skill "${name}" not found. Use skill_list to see available skills.` }] }
 

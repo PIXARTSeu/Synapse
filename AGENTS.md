@@ -127,6 +127,9 @@ FIX → systematic-debugging ─────────────────
 
 - `grilling` affianca `superpowers:brainstorming` ma non ne sostituisce il gate di approvazione.
 - Se una di queste skill nomina una skill upstream non importata, usa l'equivalente superpowers: `implement` → `superpowers:executing-plans` / `superpowers:subagent-driven-development` · `tdd` → `superpowers:test-driven-development` · `to-spec` → `superpowers:brainstorming` · `prototype` → percorso spike di `superpowers:brainstorming` · `code-review` → `superpowers:requesting-code-review` · `diagnosing-bugs` → `superpowers:systematic-debugging`.
+- Undici di queste skill, upstream, si avviano solo su richiesta esplicita dell'utente (`disable-model-invocation: true`): `grill-me`, `grill-with-docs`, `handoff`, `improve-codebase-architecture`, `setup-matt-pocock-skills`, `teach`, `to-questionnaire`, `to-tickets`, `triage`, `wait-what`, `wayfinder`. `skill_route` può suggerirle, ma non vanno eseguite di tua iniziativa: proponile e aspetta il sì. `triage`, `to-tickets` e `wayfinder` scrivono sull'issue tracker.
+- Nel testo upstream `/<skill>` significa `skill_read({ name: "<skill>" })`.
+- Effetti collaterali upstream: `setup-matt-pocock-skills` modifica il `CLAUDE.md` del repo e crea `CONTEXT.md` e `docs/adr/` (chiedi prima); `resolving-merge-conflicts` fa commit da sola, quindi applica prima ESLint Auto-Fix e `codegraph_detect_changes`.
 
 ### Dove finiscono spec e piani
 
